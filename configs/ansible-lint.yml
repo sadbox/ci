@@ -1,0 +1,9 @@
+# The default ansible-lint configuration lint.yml uses when the caller has
+# none (.ansible-lint or .config/ansible-lint.yml in the ansible directory,
+# or the ansible-lint-config input). A caller's own file replaces this one
+# entirely.
+profile: production
+
+skip_list:
+  # Task names are prose, in whatever case reads best.
+  - name[casing]

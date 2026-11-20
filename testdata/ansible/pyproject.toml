@@ -1,0 +1,12 @@
+# The ansible fixture lint.yml's ansible job runs on in sadbox/ci's own
+# CI: a locked environment, as a caller's ansible directory has.
+[project]
+name = "sadbox-ci-ansible-fixture"
+version = "0"
+requires-python = ">=3.12"
+dependencies = [
+    "ansible-core==2.21.6",
+]
+
+[tool.uv]
+package = false

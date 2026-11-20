@@ -1,0 +1,18 @@
+# The default actionlint configuration lint.yml uses when the caller has
+# none (.github/actionlint.yaml or .yml, or the actionlint-config input).
+# A caller's own file replaces this one entirely.
+
+# actionlint 1.7.12 doesn't know the ubuntu-26.04 runner labels yet;
+# declaring them here keeps every other label check on.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
+    - ubuntu-26.04-arm
+
+paths:
+  .github/workflows/**/*.{yml,yaml}:
+    ignore:
+      # The job.workflow_* context properties (September 2026), which
+      # sadbox/ci's reusable workflows use to fetch their own files;
+      # actionlint 1.7.12 predates them. Remove once actionlint knows them.
+      - 'property "workflow_(sha|repository)" is not defined in object type'

@@ -1,0 +1,22 @@
+# The default zizmor configuration lint.yml uses when the caller has none
+# (zizmor.yml or .github/zizmor.yml, or the zizmor-config input). A
+# caller's own file replaces this one entirely.
+rules:
+  # STANDARDS.md: every `uses:` pinned by full commit SHA, first-party
+  # actions included (zizmor's default lets actions/* use a tag).
+  unpinned-uses:
+    config:
+      policies:
+        "*": hash-pin
+
+  # STANDARDS.md: a 3-day cooldown (Dependabot's own default) on every
+  # ecosystem; zizmor's default asks for 7.
+  dependabot-cooldown:
+    config:
+      days: 3
+
+  # The `uses: $/...` self-repository syntax (July 2026) is what this
+  # suggests, but actionlint 1.7.12 rejects it. Re-enable, and move the
+  # `./` references over, once actionlint accepts it.
+  self-repository:
+    disable: true

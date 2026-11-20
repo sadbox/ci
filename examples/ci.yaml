@@ -1,0 +1,49 @@
+# An example caller: .github/workflows/ci.yaml in a Go service with a
+# Dockerfile. Replace <sha> with the commit of a sadbox/ci release tag and
+# keep the tag in the comment; Dependabot (github-actions) then moves both.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  # publish.yaml can run the same checks before it pushes an image.
+  workflow_call:
+
+# The called workflows' jobs ask for contents: read and nothing else; a
+# caller can't give them more than it has.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.workflow == 'ci' && github.event_name == 'pull_request' }}
+
+jobs:
+  # gofmt, go vet, go test -race, golangci-lint and govulncheck inside the
+  # Dockerfile's `test` target, on linux/amd64 and linux/arm64.
+  go:
+    uses: sadbox/ci/.github/workflows/go.yml@<sha> # vX.Y.Z
+    permissions:
+      contents: read
+    # with:
+    #   context: rproxy              # a service in a subdirectory
+    #   test-target: test
+    #   go-test-flags: -count=1
+    #
+    # A library without a Dockerfile (setup-go mode):
+    #   go-versions: '["1.26.x", "stable"]'
+    #   modules: . tools
+
+  # Everything else the repository holds: actionlint and zizmor always, and
+  # shellcheck, hadolint, ruff, osv-scanner, npm audit/eslint and
+  # ansible-lint where there are files for them.
+  lint:
+    uses: sadbox/ci/.github/workflows/lint.yml@<sha> # vX.Y.Z
+    permissions:
+      contents: read
+    # with:
+    #   skip: eslint
+    #   exclude: ^third_party/
+    #   ansible-directory: ansible

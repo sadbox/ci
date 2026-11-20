@@ -1,0 +1,15 @@
+# ansible-lint, for lint.yml's ansible job. uv.lock pins it and every
+# transitive package by version and hash; lint.yml runs it with
+# `uv run --locked`, and Dependabot (uv, /tools/ansible) bumps it. The
+# playbooks' collections come from the caller's own locked environment
+# (ANSIBLE_COLLECTIONS_PATH), not from here.
+[project]
+name = "sadbox-ci-ansible-lint"
+version = "0"
+requires-python = ">=3.12"
+dependencies = [
+    "ansible-lint==26.11.0",
+]
+
+[tool.uv]
+package = false

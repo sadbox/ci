@@ -1,0 +1,276 @@
+# The Go checks every Go module gets (STANDARDS.md, Go): gofmt, go vet,
+# go test -race, golangci-lint and govulncheck, natively on linux/amd64
+# (ubuntu-26.04) and linux/arm64 (ubuntu-26.04-arm).
+#
+# Two modes:
+#
+# - Docker (the default): the caller's Dockerfile `test` target, the Go
+#   build stage with the module's sources in its WORKDIR, is built for each
+#   platform and every check runs inside it. The Dockerfile's
+#   golang:X.Y.Z@sha256 is then the only Go version: a Dependabot bump
+#   moves the compiler, the tests and the linters together.
+#   golangci-lint and govulncheck are compiled inside that image too
+#   (tools/go), so they always support its Go.
+# - setup-go: when go-versions is set (a library with no image, or a tool
+#   built outside Docker), the same checks on the runner, for each Go
+#   version in the list and each module in `modules`.
+#
+# The tool versions are pinned in sadbox/ci (tools/go/go.mod, bumped by
+# Dependabot), which this workflow fetches at its own commit.
+name: go
+
+on:
+  workflow_call:
+    inputs:
+      context:
+        description: Docker mode. The build context, relative to the repository root.
+        type: string
+        default: "."
+      dockerfile:
+        description: Docker mode. The Dockerfile, relative to the repository root (default <context>/Dockerfile).
+        type: string
+        default: ""
+      test-target:
+        description: Docker mode. The Dockerfile target holding the Go toolchain and the module's sources in its WORKDIR.
+        type: string
+        default: test
+      build-args:
+        description: Docker mode. Build arguments for the test target, one NAME=VALUE per line.
+        type: string
+        default: ""
+      go-versions:
+        description: >-
+          setup-go mode, when set. A JSON list of Go versions for setup-go
+          (e.g. ["1.26.x", "stable"]); an entry ending in go.mod (e.g.
+          "deploy/go.mod") takes the version from that file.
+        type: string
+        default: ""
+      modules:
+        description: setup-go mode. The module directories to check, whitespace-separated, relative to the repository root.
+        type: string
+        default: "."
+      run-tests:
+        description: Run go test -race (false when the caller runs its tests its own way, e.g. as root).
+        type: boolean
+        default: true
+      go-test-flags:
+        description: Extra go test flags, e.g. "-count=1 -tags e2e".
+        type: string
+        default: ""
+      golangci-config:
+        description: >-
+          A golangci-lint configuration, relative to the repository root.
+          Default: the module's own .golangci.{yml,yaml,toml,json}, else
+          sadbox/ci's configs/golangci.yml.
+        type: string
+        default: ""
+      timeout-minutes:
+        description: Each job's timeout.
+        type: number
+        default: 30
+
+permissions: {}
+
+jobs:
+  docker:
+    if: inputs.go-versions == ''
+    name: test (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-26.04
+          - platform: linux/arm64
+            runner: ubuntu-26.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+    env:
+      PLATFORM: ${{ matrix.platform }}
+      IMAGE: sadbox-ci-go-test:local
+      CONTEXT: ${{ inputs.context }}
+      GO_TEST_FLAGS: ${{ inputs.go-test-flags }}
+      GOLANGCI_CONFIG_INPUT: ${{ inputs.golangci-config }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch sadbox/ci at this workflow's commit
+        env:
+          CI_REPO: ${{ job.workflow_repository }}
+          CI_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [ -z "$CI_REPO" ] || [ -z "$CI_SHA" ]; then
+            echo "::error::job.workflow_repository or job.workflow_sha is empty"
+            exit 1
+          fi
+          git init -q "$RUNNER_TEMP/sadbox-ci"
+          git -C "$RUNNER_TEMP/sadbox-ci" fetch -q --depth 1 "https://github.com/$CI_REPO" "$CI_SHA"
+          git -C "$RUNNER_TEMP/sadbox-ci" checkout -q FETCH_HEAD
+          echo "sadbox/ci at $CI_REPO@$CI_SHA"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build the test target for ${{ matrix.platform }}
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          target: ${{ inputs.test-target }}
+          build-args: ${{ inputs.build-args }}
+          platforms: ${{ matrix.platform }}
+          push: false
+          load: true
+          provenance: false
+          tags: sadbox-ci-go-test:local
+          cache-from: type=gha,scope=sadbox-ci-go-${{ inputs.context }}-${{ inputs.test-target }}-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=sadbox-ci-go-${{ inputs.context }}-${{ inputs.test-target }}-${{ matrix.platform }}
+
+      - name: The image's Go
+        id: go
+        run: |
+          echo "version=$(docker run --rm --platform "$PLATFORM" --entrypoint go "$IMAGE" env GOVERSION)" >>"$GITHUB_OUTPUT"
+          echo "tools=$(cat "$RUNNER_TEMP/sadbox-ci/tools/go/go.mod" "$RUNNER_TEMP/sadbox-ci/tools/go/go.sum" | sha256sum | cut -c1-16)" >>"$GITHUB_OUTPUT"
+          docker run --rm --platform "$PLATFORM" --entrypoint go "$IMAGE" version
+          echo "WORKDIR: $(docker image inspect -f '{{.Config.WorkingDir}}' "$IMAGE")"
+
+      # Mounted as the container's GOCACHE (and golangci-lint's cache), so
+      # compiled packages and passing test results carry from run to run.
+      # The key changes only with go.sum; a miss starts from this
+      # platform's newest older cache.
+      - name: Go build cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/sadbox-ci-gocache
+          key: sadbox-ci-go-${{ matrix.platform }}-${{ steps.go.outputs.version }}-${{ inputs.context }}-${{ hashFiles(format('{0}/**/go.sum', inputs.context)) }}
+          restore-keys: sadbox-ci-go-${{ matrix.platform }}-${{ steps.go.outputs.version }}-${{ inputs.context }}-
+
+      - name: golangci-lint and govulncheck binaries
+        id: tools-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/sadbox-ci-bin
+          key: sadbox-ci-tools-${{ matrix.platform }}-${{ steps.go.outputs.version }}-${{ steps.go.outputs.tools }}
+
+      - name: Build golangci-lint and govulncheck with the image's Go
+        id: tools
+        if: steps.tools-cache.outputs.cache-hit != 'true'
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/go-docker.sh" tools
+
+      - name: gofmt
+        if: ${{ !cancelled() && steps.go.outcome == 'success' }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/go-docker.sh" fmt
+
+      - name: go vet
+        if: ${{ !cancelled() && steps.go.outcome == 'success' }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/go-docker.sh" vet
+
+      - name: go test -race
+        if: ${{ !cancelled() && steps.go.outcome == 'success' && inputs.run-tests }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/go-docker.sh" test
+
+      - name: golangci-lint
+        if: ${{ !cancelled() && steps.go.outcome == 'success' && steps.tools.outcome != 'failure' }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/go-docker.sh" lint
+
+      - name: govulncheck
+        if: ${{ !cancelled() && steps.go.outcome == 'success' && steps.tools.outcome != 'failure' }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/go-docker.sh" vuln
+
+  setup-go:
+    if: inputs.go-versions != ''
+    name: test (go ${{ matrix.go }}, ${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # The fallback only keeps the expression valid when this job is
+        # skipped (go-versions empty).
+        go: ${{ fromJSON(inputs.go-versions || '["unused"]') }}
+        platform: [linux/amd64, linux/arm64]
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-26.04
+          - platform: linux/arm64
+            runner: ubuntu-26.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+    env:
+      MODULES: ${{ inputs.modules }}
+      GO_TEST_FLAGS: ${{ inputs.go-test-flags }}
+      GOLANGCI_CONFIG_INPUT: ${{ inputs.golangci-config }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch sadbox/ci at this workflow's commit
+        env:
+          CI_REPO: ${{ job.workflow_repository }}
+          CI_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [ -z "$CI_REPO" ] || [ -z "$CI_SHA" ]; then
+            echo "::error::job.workflow_repository or job.workflow_sha is empty"
+            exit 1
+          fi
+          git init -q "$RUNNER_TEMP/sadbox-ci"
+          git -C "$RUNNER_TEMP/sadbox-ci" fetch -q --depth 1 "https://github.com/$CI_REPO" "$CI_SHA"
+          git -C "$RUNNER_TEMP/sadbox-ci" checkout -q FETCH_HEAD
+          echo "sadbox/ci at $CI_REPO@$CI_SHA"
+
+      - name: Set up Go ${{ matrix.go }}
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: ${{ !endsWith(matrix.go, 'go.mod') && matrix.go || '' }}
+          go-version-file: ${{ endsWith(matrix.go, 'go.mod') && matrix.go || '' }}
+          cache-dependency-path: "**/go.sum"
+
+      - name: Go version
+        id: go
+        run: |
+          echo "version=$(go env GOVERSION)" >>"$GITHUB_OUTPUT"
+          echo "tools=$(cat "$RUNNER_TEMP/sadbox-ci/tools/go/go.mod" "$RUNNER_TEMP/sadbox-ci/tools/go/go.sum" | sha256sum | cut -c1-16)" >>"$GITHUB_OUTPUT"
+          go version
+
+      - name: golangci-lint and govulncheck binaries
+        id: tools-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/sadbox-ci-bin
+          key: sadbox-ci-tools-${{ matrix.platform }}-${{ steps.go.outputs.version }}-${{ steps.go.outputs.tools }}
+
+      - name: Build golangci-lint and govulncheck with this Go
+        id: tools
+        if: steps.tools-cache.outputs.cache-hit != 'true'
+        env:
+          SADBOX_CI: ${{ runner.temp }}/sadbox-ci
+          SADBOX_CI_BIN: ${{ runner.temp }}/sadbox-ci-bin
+        run: bash "$SADBOX_CI/scripts/go-check.sh" tools
+
+      - name: gofmt
+        if: ${{ !cancelled() && steps.go.outcome == 'success' }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/go-modules.sh" fmt
+
+      - name: go vet
+        if: ${{ !cancelled() && steps.go.outcome == 'success' }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/go-modules.sh" vet
+
+      - name: go test -race
+        if: ${{ !cancelled() && steps.go.outcome == 'success' && inputs.run-tests }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/go-modules.sh" test
+
+      - name: golangci-lint
+        if: ${{ !cancelled() && steps.go.outcome == 'success' && steps.tools.outcome != 'failure' }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/go-modules.sh" lint
+
+      - name: govulncheck
+        if: ${{ !cancelled() && steps.go.outcome == 'success' && steps.tools.outcome != 'failure' }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/go-modules.sh" vuln
