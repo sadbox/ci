@@ -38,7 +38,7 @@ if [ "$phase" = lint ]; then
   # against the module root; the extension tells golangci-lint the format.
   workdir=$(docker image inspect -f '{{.Config.WorkingDir}}' "$IMAGE")
   workdir=${workdir:-/}
-  cfg=$(bash "$ci/scripts/golangci-config.sh" "$CONTEXT")
+  cfg=$(SADBOX_CI=$ci bash "$ci/scripts/golangci-config.sh" "$CONTEXT")
   in_image=${workdir%/}/.sadbox-ci-golangci.${cfg##*.}
   echo "golangci-lint configuration: $cfg"
   args+=(-v "$cfg:$in_image:ro" -e "GOLANGCI_CONFIG=$in_image")
