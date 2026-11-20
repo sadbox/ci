@@ -1,0 +1,27 @@
+# The default golangci-lint configuration go.yml uses when the caller has
+# none (a .golangci.{yml,yaml,toml,json} in the module, or the
+# golangci-config input). A caller's own file replaces this one entirely;
+# start from a copy of it to extend rather than replace.
+version: "2"
+
+linters:
+  # errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+  enable:
+    - bodyclose # an unclosed HTTP response body leaks the connection
+    - errorlint # errors compared or type-asserted without errors.Is/As
+    - misspell
+    - nolintlint # a //nolint must name the linter and still be needed
+    - unconvert
+  settings:
+    nolintlint:
+      require-specific: true
+  exclusions:
+    # Generated files, and the usual false positives in tests.
+    generated: lax
+    presets:
+      - std-error-handling
+
+# gofmt is checked by go.yml itself.
+formatters:
+  enable: []

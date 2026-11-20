@@ -1,0 +1,6 @@
+# The default hadolint configuration lint.yml uses when the caller has none
+# (.hadolint.yaml in the repository root, or the hadolint-config input). A
+# caller's own file replaces this one entirely.
+#
+# Warnings and errors fail; info and style findings are reported only.
+failure-threshold: warning

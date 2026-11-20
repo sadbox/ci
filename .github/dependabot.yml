@@ -1,0 +1,47 @@
+# Daily, every ecosystem with an explicit 3-day cooldown (STANDARDS.md,
+# Dependabot): a release has to be 3 days old before it is proposed;
+# security updates skip the wait. Callers pick up a merged bump when
+# Dependabot moves their `uses: sadbox/ci/...@<sha>` pin to a new tag.
+version: 2
+updates:
+  # The actions the workflows use.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    cooldown:
+      default-days: 3
+
+  # The tool images lint.yml runs (tools/Dockerfile), and the fixture's
+  # golang and distroless bases. One PR per directory.
+  - package-ecosystem: "docker"
+    directories:
+      - "/tools"
+      - "/testdata/gosvc"
+    schedule:
+      interval: "daily"
+    cooldown:
+      default-days: 3
+    groups:
+      docker:
+        patterns: ["*"]
+
+  # golangci-lint and govulncheck (tools/go's tool directives).
+  - package-ecosystem: "gomod"
+    directory: "/tools/go"
+    schedule:
+      interval: "daily"
+    cooldown:
+      default-days: 3
+    groups:
+      # golangci-lint's dependency tree moves with it.
+      go-tools:
+        patterns: ["*"]
+
+  # ansible-lint (tools/ansible/uv.lock).
+  - package-ecosystem: "uv"
+    directory: "/tools/ansible"
+    schedule:
+      interval: "daily"
+    cooldown:
+      default-days: 3

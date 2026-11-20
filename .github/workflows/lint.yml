@@ -1,0 +1,399 @@
+# The linters and vulnerability checks for everything but Go (STANDARDS.md,
+# Other languages), run only where they apply: a detect job looks at the
+# repository's tracked files, and each linter is its own job, skipped when
+# there is nothing for it.
+#
+#   actionlint, zizmor    always (every repository has workflows)
+#   shellcheck            *.sh/*.bash/*.ksh/*.dash and sh/bash shebangs
+#   hadolint              Dockerfiles
+#   ruff                  *.py
+#   osv-scanner           every uv.lock
+#   npm                   every package-lock.json: npm audit --omit=dev,
+#                         npm audit signatures, and eslint where configured
+#   ansible               the ansible-directory: --syntax-check, ansible-lint
+#
+# Tool versions are pinned in sadbox/ci (tools/Dockerfile for the tool
+# images, tools/ansible for ansible-lint; Dependabot bumps both), which
+# this workflow fetches at its own commit. Configuration: the *-config
+# input if set, else the repository's own file where the tool looks for
+# it, else sadbox/ci's configs/.
+name: lint
+
+on:
+  workflow_call:
+    inputs:
+      skip:
+        description: >-
+          Linters not to run, whitespace- or comma-separated: actionlint,
+          zizmor, shellcheck, hadolint, ruff, osv-scanner, npm, eslint,
+          ansible.
+        type: string
+        default: ""
+      exclude:
+        description: An extended regular expression; tracked paths matching it are not linted.
+        type: string
+        default: ""
+      ansible-directory:
+        description: The ansible directory (its ansible.cfg, playbooks, and pyproject.toml/uv.lock if it has them).
+        type: string
+        default: ansible
+      ansible-playbooks:
+        description: >-
+          The playbooks to --syntax-check, whitespace-separated, relative to
+          ansible-directory. Default: its top-level *.yml/*.yaml files that
+          name hosts or import playbooks.
+        type: string
+        default: ""
+      actionlint-config:
+        description: An actionlint configuration, relative to the repository root.
+        type: string
+        default: ""
+      zizmor-config:
+        description: A zizmor configuration, relative to the repository root.
+        type: string
+        default: ""
+      zizmor-online:
+        description: Run zizmor's online audits (with the job's read-only token).
+        type: boolean
+        default: true
+      hadolint-config:
+        description: A hadolint configuration, relative to the repository root.
+        type: string
+        default: ""
+      ansible-lint-config:
+        description: An ansible-lint configuration, relative to the repository root.
+        type: string
+        default: ""
+    outputs:
+      linters:
+        description: The linters that ran, as a JSON list.
+        value: ${{ jobs.detect.outputs.linters }}
+
+permissions: {}
+
+jobs:
+  detect:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      actionlint: ${{ steps.detect.outputs.actionlint }}
+      zizmor: ${{ steps.detect.outputs.zizmor }}
+      shellcheck: ${{ steps.detect.outputs.shellcheck }}
+      hadolint: ${{ steps.detect.outputs.hadolint }}
+      ruff: ${{ steps.detect.outputs.ruff }}
+      osv-scanner: ${{ steps.detect.outputs.osv-scanner }}
+      npm: ${{ steps.detect.outputs.npm }}
+      eslint: ${{ steps.detect.outputs.eslint }}
+      ansible: ${{ steps.detect.outputs.ansible }}
+      linters: ${{ steps.detect.outputs.linters }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch sadbox/ci at this workflow's commit
+        env:
+          CI_REPO: ${{ job.workflow_repository }}
+          CI_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [ -z "$CI_REPO" ] || [ -z "$CI_SHA" ]; then
+            echo "::error::job.workflow_repository or job.workflow_sha is empty"
+            exit 1
+          fi
+          git init -q "$RUNNER_TEMP/sadbox-ci"
+          git -C "$RUNNER_TEMP/sadbox-ci" fetch -q --depth 1 "https://github.com/$CI_REPO" "$CI_SHA"
+          git -C "$RUNNER_TEMP/sadbox-ci" checkout -q FETCH_HEAD
+          echo "sadbox/ci at $CI_REPO@$CI_SHA"
+
+      - name: Detect
+        id: detect
+        env:
+          SKIP: ${{ inputs.skip }}
+          EXCLUDE: ${{ inputs.exclude }}
+          ANSIBLE_DIRECTORY: ${{ inputs.ansible-directory }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/detect.sh"
+
+  actionlint:
+    needs: detect
+    if: needs.detect.outputs.actionlint == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch sadbox/ci at this workflow's commit
+        env:
+          CI_REPO: ${{ job.workflow_repository }}
+          CI_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [ -z "$CI_REPO" ] || [ -z "$CI_SHA" ]; then
+            echo "::error::job.workflow_repository or job.workflow_sha is empty"
+            exit 1
+          fi
+          git init -q "$RUNNER_TEMP/sadbox-ci"
+          git -C "$RUNNER_TEMP/sadbox-ci" fetch -q --depth 1 "https://github.com/$CI_REPO" "$CI_SHA"
+          git -C "$RUNNER_TEMP/sadbox-ci" checkout -q FETCH_HEAD
+          echo "sadbox/ci at $CI_REPO@$CI_SHA"
+
+      - name: actionlint
+        env:
+          ACTIONLINT_CONFIG: ${{ inputs.actionlint-config }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" actionlint
+
+  zizmor:
+    needs: detect
+    if: needs.detect.outputs.zizmor == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch sadbox/ci at this workflow's commit
+        env:
+          CI_REPO: ${{ job.workflow_repository }}
+          CI_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [ -z "$CI_REPO" ] || [ -z "$CI_SHA" ]; then
+            echo "::error::job.workflow_repository or job.workflow_sha is empty"
+            exit 1
+          fi
+          git init -q "$RUNNER_TEMP/sadbox-ci"
+          git -C "$RUNNER_TEMP/sadbox-ci" fetch -q --depth 1 "https://github.com/$CI_REPO" "$CI_SHA"
+          git -C "$RUNNER_TEMP/sadbox-ci" checkout -q FETCH_HEAD
+          echo "sadbox/ci at $CI_REPO@$CI_SHA"
+
+      - name: zizmor
+        env:
+          ZIZMOR_CONFIG: ${{ inputs.zizmor-config }}
+          ZIZMOR_ONLINE: ${{ inputs.zizmor-online }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" zizmor
+
+  shellcheck:
+    needs: detect
+    if: needs.detect.outputs.shellcheck == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch sadbox/ci at this workflow's commit
+        env:
+          CI_REPO: ${{ job.workflow_repository }}
+          CI_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [ -z "$CI_REPO" ] || [ -z "$CI_SHA" ]; then
+            echo "::error::job.workflow_repository or job.workflow_sha is empty"
+            exit 1
+          fi
+          git init -q "$RUNNER_TEMP/sadbox-ci"
+          git -C "$RUNNER_TEMP/sadbox-ci" fetch -q --depth 1 "https://github.com/$CI_REPO" "$CI_SHA"
+          git -C "$RUNNER_TEMP/sadbox-ci" checkout -q FETCH_HEAD
+          echo "sadbox/ci at $CI_REPO@$CI_SHA"
+
+      - name: shellcheck
+        env:
+          EXCLUDE: ${{ inputs.exclude }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" shellcheck
+
+  hadolint:
+    needs: detect
+    if: needs.detect.outputs.hadolint == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch sadbox/ci at this workflow's commit
+        env:
+          CI_REPO: ${{ job.workflow_repository }}
+          CI_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [ -z "$CI_REPO" ] || [ -z "$CI_SHA" ]; then
+            echo "::error::job.workflow_repository or job.workflow_sha is empty"
+            exit 1
+          fi
+          git init -q "$RUNNER_TEMP/sadbox-ci"
+          git -C "$RUNNER_TEMP/sadbox-ci" fetch -q --depth 1 "https://github.com/$CI_REPO" "$CI_SHA"
+          git -C "$RUNNER_TEMP/sadbox-ci" checkout -q FETCH_HEAD
+          echo "sadbox/ci at $CI_REPO@$CI_SHA"
+
+      - name: hadolint
+        env:
+          EXCLUDE: ${{ inputs.exclude }}
+          HADOLINT_CONFIG: ${{ inputs.hadolint-config }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" hadolint
+
+  ruff:
+    needs: detect
+    if: needs.detect.outputs.ruff == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch sadbox/ci at this workflow's commit
+        env:
+          CI_REPO: ${{ job.workflow_repository }}
+          CI_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [ -z "$CI_REPO" ] || [ -z "$CI_SHA" ]; then
+            echo "::error::job.workflow_repository or job.workflow_sha is empty"
+            exit 1
+          fi
+          git init -q "$RUNNER_TEMP/sadbox-ci"
+          git -C "$RUNNER_TEMP/sadbox-ci" fetch -q --depth 1 "https://github.com/$CI_REPO" "$CI_SHA"
+          git -C "$RUNNER_TEMP/sadbox-ci" checkout -q FETCH_HEAD
+          echo "sadbox/ci at $CI_REPO@$CI_SHA"
+
+      - name: ruff check
+        env:
+          EXCLUDE: ${{ inputs.exclude }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" ruff
+
+  osv-scanner:
+    needs: detect
+    if: needs.detect.outputs.osv-scanner == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch sadbox/ci at this workflow's commit
+        env:
+          CI_REPO: ${{ job.workflow_repository }}
+          CI_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [ -z "$CI_REPO" ] || [ -z "$CI_SHA" ]; then
+            echo "::error::job.workflow_repository or job.workflow_sha is empty"
+            exit 1
+          fi
+          git init -q "$RUNNER_TEMP/sadbox-ci"
+          git -C "$RUNNER_TEMP/sadbox-ci" fetch -q --depth 1 "https://github.com/$CI_REPO" "$CI_SHA"
+          git -C "$RUNNER_TEMP/sadbox-ci" checkout -q FETCH_HEAD
+          echo "sadbox/ci at $CI_REPO@$CI_SHA"
+
+      - name: osv-scanner on uv.lock
+        env:
+          EXCLUDE: ${{ inputs.exclude }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" osv-scanner
+
+  npm:
+    needs: detect
+    if: needs.detect.outputs.npm == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      EXCLUDE: ${{ inputs.exclude }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch sadbox/ci at this workflow's commit
+        env:
+          CI_REPO: ${{ job.workflow_repository }}
+          CI_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [ -z "$CI_REPO" ] || [ -z "$CI_SHA" ]; then
+            echo "::error::job.workflow_repository or job.workflow_sha is empty"
+            exit 1
+          fi
+          git init -q "$RUNNER_TEMP/sadbox-ci"
+          git -C "$RUNNER_TEMP/sadbox-ci" fetch -q --depth 1 "https://github.com/$CI_REPO" "$CI_SHA"
+          git -C "$RUNNER_TEMP/sadbox-ci" checkout -q FETCH_HEAD
+          echo "sadbox/ci at $CI_REPO@$CI_SHA"
+
+      - name: npm ci (no scripts)
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" npm-ci
+
+      - name: npm audit --omit=dev
+        if: ${{ !cancelled() }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" npm-audit
+
+      - name: npm audit signatures
+        if: ${{ !cancelled() }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" npm-signatures
+
+      - name: eslint (where configured)
+        if: ${{ !cancelled() && needs.detect.outputs.eslint == 'true' }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" eslint
+
+  ansible:
+    needs: detect
+    if: needs.detect.outputs.ansible == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      ANSIBLE_DIRECTORY: ${{ inputs.ansible-directory }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch sadbox/ci at this workflow's commit
+        env:
+          CI_REPO: ${{ job.workflow_repository }}
+          CI_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [ -z "$CI_REPO" ] || [ -z "$CI_SHA" ]; then
+            echo "::error::job.workflow_repository or job.workflow_sha is empty"
+            exit 1
+          fi
+          git init -q "$RUNNER_TEMP/sadbox-ci"
+          git -C "$RUNNER_TEMP/sadbox-ci" fetch -q --depth 1 "https://github.com/$CI_REPO" "$CI_SHA"
+          git -C "$RUNNER_TEMP/sadbox-ci" checkout -q FETCH_HEAD
+          echo "sadbox/ci at $CI_REPO@$CI_SHA"
+
+      - name: uv and the locked environments
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/ansible.sh" setup
+
+      - name: ansible-playbook --syntax-check
+        env:
+          ANSIBLE_PLAYBOOKS: ${{ inputs.ansible-playbooks }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/ansible.sh" syntax
+
+      - name: ansible-lint
+        if: ${{ !cancelled() }}
+        env:
+          ANSIBLE_LINT_CONFIG: ${{ inputs.ansible-lint-config }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/ansible.sh" lint

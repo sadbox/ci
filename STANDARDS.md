@@ -23,7 +23,7 @@ Every long-running service:
   reads. No service gets the host's 1Password service-account token.
 - **Shared Go code lives in the shared module** (see [Go](#go)), not copied
   between repositories and not imported from another service's repository.
-- **Logs:** `log/slog` text handler to stdout.
+- **Logs:** `log/slog` text handler to stderr.
 
 ## Go
 
@@ -110,7 +110,7 @@ in CI:
   included (it is Dependabot's default anyway, measured from the tag's last
   push); security updates skip it.
 - Docker images grouped into one PR per directory.
-- Reviewed and merged by the dep-review gate (this repository).
+- Reviewed and merged by the dep-review gate (sadbox/dep-review).
 
 ## Repository settings
 

@@ -1,0 +1,66 @@
+# sadbox/ci's own CI: lint.yml on this repository (its workflows, scripts,
+# tool Dockerfile and the fixtures under testdata/), and go.yml in both
+# modes against the fixture service testdata/gosvc on both architectures.
+# Every PR and every push to main; no path filter, so each job can be a
+# required check.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    uses: ./.github/workflows/lint.yml
+    permissions:
+      contents: read
+    with:
+      ansible-directory: testdata/ansible
+
+  # Docker mode: testdata/gosvc's Dockerfile `test` target.
+  go-docker:
+    uses: ./.github/workflows/go.yml
+    permissions:
+      contents: read
+    with:
+      context: testdata/gosvc
+
+  # setup-go mode: the version from go.mod, and the newest stable Go.
+  go-setup-go:
+    uses: ./.github/workflows/go.yml
+    permissions:
+      contents: read
+    with:
+      go-versions: '["testdata/gosvc/go.mod", "stable"]'
+      modules: testdata/gosvc
+
+  # The scripts' own failure paths, which the fixtures above (clean by
+  # design) never reach.
+  selftest:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: testdata/gosvc/go.mod
+          cache: false
+
+      - name: scripts/selftest.sh
+        run: bash scripts/selftest.sh
