@@ -67,8 +67,19 @@ in CI:
 - **Tags:** `:latest` plus one immutable tag, `sha-<7-char commit>`, on
   every publish; labels `org.opencontainers.image.source` and
   `org.opencontainers.image.revision`. BuildKit provenance and SBOM
-  attestations on every image (`provenance: mode=max`, `sbom: true`), and
-  GitHub artifact attestations where the plan allows (public repositories).
+  attestations on every image, private repositories included
+  (`provenance: mode=max`, `sbom: true`). GitHub artifact attestations
+  (`actions/attest-build-provenance`) on public repositories only: on
+  private ones they need GitHub Enterprise Cloud, which isn't worth paying
+  for here. Private images go without them; that is not a deviation.
+- **Build cache in GHCR, written only by the publish job:**
+  `type=registry,ref=ghcr.io/<owner>/<image>:buildcache-<arch>,mode=max`
+  as `cache-to` and `cache-from` there (the only job with
+  `packages: write`). Test and PR builds may `cache-from` it, never
+  `cache-to`. `buildcache-*` tags are never deployed. BuildKit cache
+  mounts (`RUN --mount=type=cache`) are not exported to a registry cache,
+  so a publish recompiles whatever its cached layers don't cover; that cost
+  is accepted (no buildkit-cache-dance, see [GitHub Actions](#github-actions)).
 - **`.dockerignore`** in every repository with a Dockerfile (at least
   `.git` and local data).
 - **Non-root.** Every image runs as a non-root user (`nonroot` in
@@ -91,7 +102,41 @@ in CI:
 
 ## GitHub Actions
 
-- Every `uses:` pinned by full commit SHA with a full `# vX.Y.Z` comment.
+- **Workflow lockfile.** Every workflow is onboarded to
+  `.github/workflows/actions.lock` with `gh actions-lock` (the extension
+  installed at a pinned version), in the same PR that adds or changes the
+  workflow: Dependabot regenerates entries for onboarded workflows but
+  never onboards one. This pins step-level actions and their transitive
+  actions. Step `uses:` names an exact tag (`@v7.0.1`), never a floating
+  one (`@v7`, `@main`), which would accept any commit in its history,
+  rollbacks included. A workflow not yet onboarded keeps the previous rule:
+  every `uses:` pinned by full commit SHA with a `# vX.Y.Z` comment.
+- **Cross-repository reusable workflows** (job-level `uses:` of
+  sadbox/ci, sadbox/dep-review) by full commit SHA with a `# vX.Y.Z`
+  comment: the lockfile does not pin them. The called repository is
+  onboarded to its own lockfile first, and a caller onboards only once it
+  pins a callee commit that contains `actions.lock`. Same-repository calls
+  (`uses: ./.github/workflows/…`) carry no ref.
+- **Images in workflows** (`docker://` steps, job `container:` and
+  `services:`) pinned `tag@sha256:<digest>`: the lockfile does not cover
+  them.
+- **`gh actions-lock --verify` on every PR**, as a required status check
+  (from sadbox/ci's `lint.yml`; not path-filtered, per
+  [Repository settings](#repository-settings)).
+- **Require lockfile** (Settings → Actions → Policies) active on every
+  repository once `--verify` passes there.
+- zizmor 1.32.0 or later (the first that accepts lockfile-pinned refs).
+- **No Actions cache anywhere in CI:** no step restores from or saves to
+  the Actions cache. No `actions/cache`, no BuildKit `type=gha` cache, no
+  buildkit-cache-dance, and caching inputs that default on are turned off
+  (`actions/setup-go` `cache: false`, `astral-sh/setup-uv`
+  `enable-cache: false`, `docker/setup-buildx-action`
+  `cache-binary: false`). The dep-review gate
+  handles untrusted dependency contents in the default branch's cache
+  scope. Entries there are first-write-wins, and every run falls back to
+  that scope (main's, and a new PR's), so one planted entry would reach
+  images and test results (a cached `go test` pass). Docker layers stay
+  warm through the GHCR build cache (see [Container images](#container-images)).
 - Top-level `permissions: contents: read` (or `{}`); jobs ask for more only
   where needed (`packages: write` only on the publish job).
 - Untrusted event fields reach shells only through `env:`, never `${{ }}`
@@ -110,7 +155,9 @@ in CI:
   included (it is Dependabot's default anyway, measured from the tag's last
   push); security updates skip it.
 - Docker images grouped into one PR per directory.
-- Reviewed and merged by the dep-review gate (sadbox/dep-review).
+- Reviewed and merged by the dep-review gate (sadbox/dep-review). The gate
+  treats `actions.lock` as a dependency change: a PR whose lockfile diff
+  goes beyond the entries for the action it bumps goes to a human.
 
 ## Repository settings
 
