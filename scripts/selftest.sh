@@ -56,7 +56,8 @@ grep -qx 'zizmor=false' <<<"$out" || fail "detect.sh ran a skipped linter"
 grep -qx 'npm=false' <<<"$out" || fail "detect.sh ran a skipped linter"
 grep -qx 'shellcheck=true' <<<"$out" || fail "detect.sh missed this repository's shell scripts"
 
-# files.sh: shebang detection, and $EXCLUDE.
+# files.sh: shebang detection, $EXCLUDE, and Dockerfiles but not their
+# .dockerignore files.
 git init -q "$tmp/repo"
 (
   cd "$tmp/repo"
@@ -65,10 +66,13 @@ git init -q "$tmp/repo"
   printf '#!/usr/bin/env python3\n' >py
   printf '#!/bin/zsh\n' >z
   printf 'FROM x\n' >Dockerfile.dev
+  printf 'FROM x\n' >app.Dockerfile
+  printf '*\n' >Dockerfile.dockerignore
+  printf '*\n' >app.Dockerfile.dockerignore
   git add .
   [ "$(bash "$root/scripts/files.sh" shell | tr '\0' ' ')" = "run.sh tool " ] || fail "files.sh shell: $(bash "$root/scripts/files.sh" shell | tr '\0' ' ')"
   [ "$(EXCLUDE='^tool$' bash "$root/scripts/files.sh" shell | tr '\0' ' ')" = "run.sh " ] || fail "files.sh: EXCLUDE"
-  [ "$(bash "$root/scripts/files.sh" dockerfile | tr '\0' ' ')" = "Dockerfile.dev " ] || fail "files.sh dockerfile"
+  [ "$(bash "$root/scripts/files.sh" dockerfile | tr '\0' ' ')" = "Dockerfile.dev app.Dockerfile " ] || fail "files.sh dockerfile: $(bash "$root/scripts/files.sh" dockerfile | tr '\0' ' ')"
 )
 
 # dep-review-triggers.sh: the gate's caller may use workflow_run, never

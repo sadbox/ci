@@ -36,6 +36,10 @@ tracked | while IFS= read -r -d '' f; do
     ;;
   dockerfile)
     case $base in
+    # BuildKit's per-Dockerfile ignore file (Dockerfile.dockerignore beside
+    # Dockerfile, app.Dockerfile.dockerignore beside app.Dockerfile): no
+    # Dockerfile, though Dockerfile.* matches its name.
+    *.dockerignore) ;;
     Dockerfile | Dockerfile.* | Containerfile | Containerfile.* | *.Dockerfile | *.dockerfile) printf '%s\0' "$f" ;;
     esac
     ;;
