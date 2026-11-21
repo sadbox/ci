@@ -15,6 +15,14 @@ rules:
     config:
       days: 3
 
+  # STANDARDS.md: `workflow_run` only for the dep-review gate. Its caller,
+  # .github/workflows/dep-review.yaml, must start on workflow_run (that is
+  # how it gets the app key without running PR code); everywhere else the
+  # trigger stays an error.
+  dangerous-triggers:
+    ignore:
+      - dep-review.yaml
+
   # The `uses: $/...` self-repository syntax (July 2026) is what this
   # suggests, but actionlint 1.7.12 rejects it. Re-enable, and move the
   # `./` references over, once actionlint accepts it.
