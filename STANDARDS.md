@@ -181,7 +181,20 @@ in CI:
   - amd64-only tests: linkclean.
   - Shared host 1Password token: sprobot bots, oncall-sync.
   - `sprobot/pkg/opsecrets` imported by oncall-sync (and sprobot itself).
-  - Quadlet baseline missing: rproxy, towngear and towngear-migrate;
-    oncall-sync lacks `UserNS=auto` and `:idmap`.
-  - Data under `/root`: towngear (`/root/towngear`). rproxy's is
-    `/caddycerts`, not `/var/lib/rproxy`.
+  - Quadlet baseline missing: rproxy (homelab-configs#105, #107).
+  - Data not under `/var/lib/<svc>`: rproxy's is `/caddycerts`
+    (homelab-configs#105).
+  - Actions cache in `go.yml` (v0.1.1 and main): `actions/cache` for
+    GOCACHE and the tool binaries, and `type=gha` for the test target.
+    Its callers (towngear, and rproxy with homelab-configs#110) inherit
+    it until a release drops them.
+  - govulncheck blind spot, rproxy (Caddy): Dependabot alerts on
+    `github.com/go-jose/go-jose/v3` <= 3.0.5 (GHSA-vvm8-gf78-28g4,
+    GHSA-4w3g-jfj2-cw2q, GHSA-mgcc-cww5-fp2q) have no fixed v3 release.
+    `smallstep/certificates` pulls it in through `caddypki`, which
+    `caddytls` imports, so trimming Caddy's modules can't drop it. The
+    vulnerable code is unreachable: the Caddyfile has no `acme_server`,
+    `tls internal` or `pki`. Blocked on smallstep/certificates moving to
+    `go.step.sm/crypto` v0.92 (go-jose v4). vuln.go.dev has no entry for
+    these yet (2026-11-21); if one lands as called, `go.yml` has no
+    per-ID exclusion and rproxy's CI goes red.
