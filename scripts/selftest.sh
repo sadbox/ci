@@ -71,4 +71,18 @@ git init -q "$tmp/repo"
   [ "$(bash "$root/scripts/files.sh" dockerfile | tr '\0' ' ')" = "Dockerfile.dev " ] || fail "files.sh dockerfile"
 )
 
+# dep-review-triggers.sh: the gate's caller may use workflow_run, never
+# pull_request_target (zizmor's exemption for the file would hide it).
+mkdir -p "$tmp/dr/.github/workflows"
+(
+  cd "$tmp/dr"
+  printf 'on:\n  workflow_run:\n    workflows: [dep-review-trigger]\n  schedule:\n    - cron: "17 * * * *"\n' >.github/workflows/dep-review.yaml
+  bash "$root/scripts/dep-review-triggers.sh" >/dev/null || fail "dep-review-triggers.sh refused a workflow_run caller"
+  printf 'on:\n  workflow_run:\n    workflows: [dep-review-trigger]\n  pull_request_target:\n' >.github/workflows/dep-review.yaml
+  if bash "$root/scripts/dep-review-triggers.sh" >/dev/null; then fail "dep-review-triggers.sh passed pull_request_target"; fi
+  printf 'on: [workflow_run, pull_request_target]\n' >.github/workflows/dep-review.yml
+  printf 'on:\n  workflow_run:\n' >.github/workflows/dep-review.yaml
+  if bash "$root/scripts/dep-review-triggers.sh" >/dev/null; then fail "dep-review-triggers.sh passed pull_request_target in dep-review.yml"; fi
+)
+
 echo "selftest: ok"

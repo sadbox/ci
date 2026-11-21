@@ -50,6 +50,9 @@ actionlint)
   ;;
 
 zizmor)
+  # configs/zizmor.yml ignores dangerous-triggers in dep-review.yaml for its
+  # workflow_run; pull_request_target there must still fail.
+  bash "$ci/scripts/dep-review-triggers.sh"
   cfg=$(config "${ZIZMOR_CONFIG:-}" zizmor.yml zizmor.yml zizmor.yaml .github/zizmor.yml .github/zizmor.yaml)
   args=(--format=github)
   if [ -n "$cfg" ]; then args+=(--config "$cfg"); fi
