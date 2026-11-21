@@ -111,10 +111,12 @@ in CI:
   one (`@v7`, `@main`), which would accept any commit in its history,
   rollbacks included. A workflow not yet onboarded keeps the previous rule:
   every `uses:` pinned by full commit SHA with a `# vX.Y.Z` comment.
-- **Reusable workflows** (job-level `uses:`) by full commit SHA with a
-  `# vX.Y.Z` comment: the lockfile does not pin them. The called repository
-  (sadbox/ci) is onboarded to its own lockfile before any caller turns on
-  Require lockfile.
+- **Cross-repository reusable workflows** (job-level `uses:` of
+  sadbox/ci, sadbox/dep-review) by full commit SHA with a `# vX.Y.Z`
+  comment: the lockfile does not pin them. The called repository is
+  onboarded to its own lockfile first, and a caller onboards only once it
+  pins a callee commit that contains `actions.lock`. Same-repository calls
+  (`uses: ./.github/workflows/…`) carry no ref.
 - **Images in workflows** (`docker://` steps, job `container:` and
   `services:`) pinned `tag@sha256:<digest>`: the lockfile does not cover
   them.
@@ -124,9 +126,12 @@ in CI:
 - **Require lockfile** (Settings → Actions → Policies) active on every
   repository once `--verify` passes there.
 - zizmor 1.32.0 or later (the first that accepts lockfile-pinned refs).
-- **No Actions cache anywhere in CI:** no `actions/cache`, `cache: false`
-  on every `setup-*` action that caches by default (setup-go does), no
-  BuildKit `type=gha` cache, no buildkit-cache-dance. The dep-review gate
+- **No Actions cache anywhere in CI:** no step restores from or saves to
+  the Actions cache. No `actions/cache`, no BuildKit `type=gha` cache, no
+  buildkit-cache-dance, and caching inputs that default on are turned off
+  (`actions/setup-go` `cache: false`, `astral-sh/setup-uv`
+  `enable-cache: false`, `docker/setup-buildx-action`
+  `cache-binary: false`). The dep-review gate
   handles untrusted dependency contents in the default branch's cache
   scope. Entries there are first-write-wins, and every run falls back to
   that scope (main's, and a new PR's), so one planted entry would reach
