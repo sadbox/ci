@@ -129,7 +129,12 @@ in CI:
 - **sadbox/homelab-configs deploy tool:** built on the Mac at deploy time,
   never published as an image.
 - **sadbox/claude-routines:** no package ecosystems.
-- Being brought in line (remove each entry when done): root containers
-  (rproxy, sadbox-web), amd64-only tests (towngear, sadbox.org, oncall-sync,
-  linkclean), shared host 1Password token (sprobot bots, oncall-sync),
-  `sprobot/pkg/opsecrets` imported by towngear and oncall-sync.
+- Being brought in line (remove each entry when done):
+  - Root container: rproxy.
+  - amd64-only tests: linkclean.
+  - Shared host 1Password token: sprobot bots, oncall-sync.
+  - `sprobot/pkg/opsecrets` imported by oncall-sync (and sprobot itself).
+  - Quadlet baseline missing: rproxy, towngear and towngear-migrate;
+    oncall-sync lacks `UserNS=auto` and `:idmap`.
+  - Data under `/root`: towngear (`/root/towngear`). rproxy's is
+    `/caddycerts`, not `/var/lib/rproxy`.
