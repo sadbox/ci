@@ -153,11 +153,13 @@ stay with Ansible.
 - **Triggers:** `pull_request`, plus `push` to the default branch only. A
   push trigger on every branch runs everything twice for each commit to a
   PR (once for the push, once for the PR).
-- **Concurrency:** a PR's new run cancels the one it supersedes; default
-  branch runs never cancel. `group:` the workflow and the PR number (else
-  the ref), `cancel-in-progress:` on `pull_request` only; a workflow that is
-  also called (`workflow_call`) cancels only when it runs as itself
-  (`github.workflow`), as in `examples/ci.yaml`.
+- **Concurrency:** a PR's new run cancels the one it supersedes; no other
+  run cancels or waits:
+  `group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}`
+  and `cancel-in-progress: ${{ github.event_name == 'pull_request' }}`, as
+  in `examples/ci.yaml` (a push or a `workflow_call` run is then a group of
+  its own; a shared group would let a newer pending run displace an older
+  one). A publish that must not overlap another keeps a fixed group.
 - **Few jobs.** On private repositories each job bills at least a whole
   minute, so checks that take seconds are steps of one job (lint.yml's
   `lint`), not a job each. A new job is for another runner, real
