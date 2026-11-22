@@ -16,9 +16,11 @@ on:
 permissions:
   contents: read
 
+# A PR's new run cancels the one it supersedes; any other run (a push, or a
+# call from publish.yaml) is its own group and never cancels.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.workflow == 'ci' && github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # gofmt, go vet, go test -race, golangci-lint and govulncheck inside the

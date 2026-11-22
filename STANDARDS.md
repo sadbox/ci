@@ -148,8 +148,28 @@ stay with Ansible.
   `services:`) pinned `tag@sha256:<digest>`: the lockfile does not cover
   them.
 - **`gh actions-lock --verify` on every PR**, as a required status check
-  (from sadbox/ci's `lint.yml`; not path-filtered, per
+  (sadbox/ci's `lint.yml`, check `lint / lint`; not path-filtered, per
   [Repository settings](#repository-settings)).
+- **Triggers:** `pull_request`, plus `push` to the default branch only. A
+  push trigger on every branch runs everything twice for each commit to a
+  PR (once for the push, once for the PR).
+- **Concurrency:** a PR's new run cancels the one it supersedes; no other
+  run cancels or waits:
+  `group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}`
+  and `cancel-in-progress: ${{ github.event_name == 'pull_request' }}`, as
+  in `examples/ci.yaml` (a push or a `workflow_call` run is then a group of
+  its own; a shared group would let a newer pending run displace an older
+  one). A publish that must not overlap another keeps a fixed group.
+- **Few jobs.** On private repositories each job bills at least a whole
+  minute, so checks that take seconds are steps of one job (lint.yml's
+  `lint`), not a job each. A new job is for another runner, real
+  parallelism, or isolation: a step that runs untrusted code on the host
+  (lint.yml's `ansible`) can forge the result of every step after it.
+- **Path-gated work** reports through one job that always runs: a detect
+  step decides, the expensive jobs skip by `if:`, and an aggregate job
+  (`needs:` them, `if: always()`) fails unless each succeeded or was
+  skipped. The aggregate is the required check: a matrix job skipped by
+  `if:` never expands, so its per-entry checks would wait forever.
 - **Require lockfile** (Settings → Actions → Policies, rule
   `require_lockfile`, all workflows, active) on every repository once
   `--verify` passes there. Created in the UI: the REST policies API
@@ -192,7 +212,9 @@ stay with Ansible.
 
 - Default branch ruleset: no deletion, no force-push, linear history, pull
   requests required, required status checks for CI (only checks that run on
-  every PR, never path-filtered ones), and **signed commits required**.
+  every PR, never path-filtered ones: path-gated work is required through
+  its aggregate job, see [GitHub Actions](#github-actions)), and **signed
+  commits required**.
 - Dependabot alerts and security updates on; on public repositories also
   secret scanning and push protection.
 - No unused secrets.
