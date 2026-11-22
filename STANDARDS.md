@@ -169,19 +169,18 @@ in CI:
   Go version matrix (1.26.x and stable) rather than a build image.
 - **rproxy (Caddy) logs JSON**, not slog text: Caddy's own format, kept
   by the owner's choice (2026-11-18).
-- **sadbox/claude-routines:** no package ecosystems.
+- **sadbox/claude-routines:** no package ecosystems, and no CI: its
+  ruleset requires signed commits, linear history and no force-push or
+  deletion, but not pull requests (the owner pushes routine prompts
+  straight to main).
 - Being brought in line (remove each entry when done):
   - amd64-only tests: linkclean.
-  - Shared host 1Password token: sprobot bots, oncall-sync.
-  - `sprobot/pkg/opsecrets` imported by oncall-sync (and sprobot itself).
-  - Default branch rulesets require signed commits, linear history, no
-    deletion and no force-push everywhere (2026-11-22); pull requests and
-    required status checks are added per repository once its lint.yml and
-    lockfile checks have landed.
-  - Workflow lockfile and `lint.yml` not yet adopted: lockfile onboarded
-    only in sadbox/ci; `lint.yml` not called by homelab-configs,
-    oncall-sync, sprobot, linkclean, svc, dep-review. "Require lockfile"
-    not on anywhere yet.
+  - `lint.yml` not called by sadbox/dep-review (its workflows are on a
+    lockfile).
+  - "Require lockfile" not on anywhere yet: every repository is onboarded,
+    but the policy is set only in the UI (the REST policies API has no
+    lockfile rule) and needs sadbox/dep-review onboarded and its callers on
+    that release first.
   - govulncheck blind spot, rproxy (Caddy): Dependabot alerts on
     `github.com/go-jose/go-jose/v3` <= 3.0.5 (GHSA-vvm8-gf78-28g4,
     GHSA-4w3g-jfj2-cw2q, GHSA-mgcc-cww5-fp2q) have no fixed v3 release.
