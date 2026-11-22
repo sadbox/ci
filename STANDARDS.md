@@ -150,8 +150,13 @@ stay with Ansible.
 - **`gh actions-lock --verify` on every PR**, as a required status check
   (from sadbox/ci's `lint.yml`; not path-filtered, per
   [Repository settings](#repository-settings)).
-- **Require lockfile** (Settings → Actions → Policies) active on every
-  repository once `--verify` passes there.
+- **Require lockfile** (Settings → Actions → Policies, rule
+  `require_lockfile`, all workflows, active) on every repository once
+  `--verify` passes there. Created in the UI: the REST policies API
+  accepts the rule in a read but not in a create or update (2026-11-22).
+- Repository setting **Require actions to be pinned to a full-length
+  commit SHA** on (`sha_pinning_required`); a workflow in the lockfile
+  satisfies it.
 - zizmor 1.32.0 or later (the first that accepts lockfile-pinned refs).
 - **Actions cache allowed** (`actions/cache`, BuildKit `type=gha`,
   setup-go/setup-uv caching), an accepted risk (owner, 2026-11-22). The
@@ -202,15 +207,12 @@ stay with Ansible.
 - **sadbox/claude-routines:** no package ecosystems, and no CI: its
   ruleset requires signed commits, linear history and no force-push or
   deletion, but not pull requests (the owner pushes routine prompts
-  straight to main).
+  straight to main). No workflow lockfile and no "Require lockfile"
+  policy: its one workflow, escalate.yaml, uses no actions.
 - Being brought in line (remove each entry when done):
   - amd64-only tests: linkclean.
   - `lint.yml` not called by sadbox/dep-review (its workflows are on a
     lockfile).
-  - "Require lockfile" not on anywhere yet: every repository is onboarded,
-    but the policy is set only in the UI (the REST policies API has no
-    lockfile rule) and needs sadbox/dep-review onboarded and its callers on
-    that release first.
   - govulncheck blind spot, rproxy (Caddy): Dependabot alerts on
     `github.com/go-jose/go-jose/v3` <= 3.0.5 (GHSA-vvm8-gf78-28g4,
     GHSA-4w3g-jfj2-cw2q, GHSA-mgcc-cww5-fp2q) have no fixed v3 release.
