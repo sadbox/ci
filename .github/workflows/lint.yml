@@ -11,6 +11,10 @@
 #   npm                   every package-lock.json: npm audit --omit=dev,
 #                         npm audit signatures, and eslint where configured
 #   ansible               the ansible-directory: --syntax-check, ansible-lint
+#   tofu                  *.tf/*.tofu: tofu fmt -check, and in each root (a
+#                         directory with a .terraform.lock.hcl) tofu init
+#                         -backend=false -lockfile=readonly and tofu validate;
+#                         tflint in every directory with *.tf files
 #   actions-lock          .github/workflows/actions.lock: gh actions-lock --verify
 #
 # Tool versions are pinned in sadbox/ci (tools/Dockerfile for the tool
@@ -27,7 +31,7 @@ on:
         description: >-
           Linters not to run, whitespace- or comma-separated: actionlint,
           zizmor, shellcheck, hadolint, ruff, osv-scanner, npm, eslint,
-          ansible, actions-lock.
+          ansible, tofu, actions-lock.
         type: string
         default: ""
       exclude:
@@ -65,6 +69,10 @@ on:
         description: An ansible-lint configuration, relative to the repository root.
         type: string
         default: ""
+      tflint-config:
+        description: A tflint configuration, relative to the repository root.
+        type: string
+        default: ""
     outputs:
       linters:
         description: The linters that ran, as a JSON list.
@@ -88,6 +96,7 @@ jobs:
       npm: ${{ steps.detect.outputs.npm }}
       eslint: ${{ steps.detect.outputs.eslint }}
       ansible: ${{ steps.detect.outputs.ansible }}
+      tofu: ${{ steps.detect.outputs.tofu }}
       actions-lock: ${{ steps.detect.outputs.actions-lock }}
       linters: ${{ steps.detect.outputs.linters }}
     steps:
@@ -399,6 +408,50 @@ jobs:
         env:
           ANSIBLE_LINT_CONFIG: ${{ inputs.ansible-lint-config }}
         run: bash "$RUNNER_TEMP/sadbox-ci/scripts/ansible.sh" lint
+
+  # No credentials, state or backend: validate runs with -backend=false,
+  # and the providers are only the ones each root's lockfile pins.
+  tofu:
+    needs: detect
+    if: needs.detect.outputs.tofu == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      EXCLUDE: ${{ inputs.exclude }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch sadbox/ci at this workflow's commit
+        env:
+          CI_REPO: ${{ job.workflow_repository }}
+          CI_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [ -z "$CI_REPO" ] || [ -z "$CI_SHA" ]; then
+            echo "::error::job.workflow_repository or job.workflow_sha is empty"
+            exit 1
+          fi
+          git init -q "$RUNNER_TEMP/sadbox-ci"
+          git -C "$RUNNER_TEMP/sadbox-ci" fetch -q --depth 1 "https://github.com/$CI_REPO" "$CI_SHA"
+          git -C "$RUNNER_TEMP/sadbox-ci" checkout -q FETCH_HEAD
+          echo "sadbox/ci at $CI_REPO@$CI_SHA"
+
+      - name: tofu fmt -check
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" tofu-fmt
+
+      - name: tofu validate (each root)
+        if: ${{ !cancelled() }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" tofu-validate
+
+      - name: tflint
+        if: ${{ !cancelled() }}
+        env:
+          TFLINT_CONFIG: ${{ inputs.tflint-config }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" tflint
 
   actions-lock:
     needs: detect

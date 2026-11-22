@@ -99,16 +99,17 @@ Dockerfile (Docker mode) or lists the modules (setup-go mode).
 | osv-scanner | `uv.lock` | `osv-scanner.toml` beside the lockfile |
 | npm | `package-lock.json`: `npm ci --ignore-scripts`, `npm audit --omit=dev`, `npm audit signatures`, and eslint where an eslint config exists | the eslint config |
 | ansible | the `ansible-directory`: `ansible-playbook --syntax-check` on each playbook with the directory's own locked uv environment, and ansible-lint with its collections | `.ansible-lint`, `.config/ansible-lint.yml` |
+| tofu | `*.tf`, `*.tofu`: `tofu fmt -check`; in each root (a directory with a `.terraform.lock.hcl`), `tofu init -backend=false -lockfile=readonly` and `tofu validate`, with no credentials or state; tflint in every directory with `*.tf` files | `.tflint.hcl` in the repository root |
 
 Files are the repository's tracked files (`git ls-files`).
 
 | Input | Default | |
 |---|---|---|
-| `skip` | | Linters not to run: `actionlint zizmor shellcheck hadolint ruff osv-scanner npm eslint ansible`. |
+| `skip` | | Linters not to run: `actionlint zizmor shellcheck hadolint ruff osv-scanner npm eslint ansible tofu actions-lock`. |
 | `exclude` | | An extended regex; matching paths are not linted. |
 | `ansible-directory` | `ansible` | |
 | `ansible-playbooks` | top-level `*.yml` naming `hosts:` or `import_playbook:` | Relative to `ansible-directory`. |
-| `actionlint-config`, `zizmor-config`, `hadolint-config`, `ansible-lint-config` | | A configuration file. |
+| `actionlint-config`, `zizmor-config`, `hadolint-config`, `ansible-lint-config`, `tflint-config` | | A configuration file. |
 | `zizmor-online` | `true` | zizmor's online audits (known-vulnerable actions, impostor commits). |
 
 Output: `linters`, the JSON list of the linters that ran.
@@ -131,7 +132,7 @@ workflows, so the images are listed as Dockerfile stages):
 
 | What | Pinned in | Dependabot ecosystem |
 |---|---|---|
-| actionlint, zizmor, shellcheck, hadolint, ruff, osv-scanner, uv, node | [tools/Dockerfile](tools/Dockerfile) (`tag@sha256`) | `docker` |
+| actionlint, zizmor, shellcheck, hadolint, ruff, osv-scanner, uv, node, tofu, tflint | [tools/Dockerfile](tools/Dockerfile) (`tag@sha256`) | `docker` |
 | golangci-lint, govulncheck | [tools/go/go.mod](tools/go/go.mod) (`tool` directives) | `gomod` |
 | ansible-lint | [tools/ansible/uv.lock](tools/ansible/uv.lock) | `uv` |
 | actions | the workflows (full SHA, `# vX.Y.Z`) | `github-actions` |
