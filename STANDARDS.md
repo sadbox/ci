@@ -200,6 +200,11 @@ stay with Ansible.
 ## Deviations
 
 - **sadbox/sadbox.org:** default branch is `master`.
+- **sadbox/dotfiles (chezmoi's source):** every machine commits and pushes
+  straight to `master`, and only home Macs sign, so its default-branch
+  ruleset has no pull requests, status checks or signed commits: only no
+  deletion, no force-push and linear history (homelab-configs
+  `tofu/github/rulesets.tf`). The owner's choice (2026-11-22).
 - **Espresso-Aficionados/linkclean:** a library, no image; tests against a
   Go version matrix (1.26.x and stable) rather than a build image.
 - **rproxy (Caddy) logs JSON**, not slog text: Caddy's own format, kept
