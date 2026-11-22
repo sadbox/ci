@@ -204,6 +204,13 @@ stay with Ansible.
   Go version matrix (1.26.x and stable) rather than a build image.
 - **rproxy (Caddy) logs JSON**, not slog text: Caddy's own format, kept
   by the owner's choice (2026-11-18).
+- **cloudflared (homelab-configs, the Cloudflare Tunnel):** upstream's
+  `docker.io/cloudflare/cloudflared:latest` with `AutoUpdate=registry`,
+  not an image built here from a pinned base, so a release reaches bonnet
+  without Dependabot's cooldown or the dep-review gate. Its health check is
+  `cloudflared tunnel ready`, the binary's own, not a `-healthcheck` flag.
+  The owner's choice (2026-11-22): tunnel fixes land within
+  podman-auto-update's 2 hours.
 - **sadbox/claude-routines:** no package ecosystems, and no CI: its
   ruleset requires signed commits, linear history and no force-push or
   deletion, but not pull requests (the owner pushes routine prompts
