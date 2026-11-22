@@ -211,11 +211,6 @@ stay with Ansible.
   `cloudflared tunnel ready`, the binary's own, not a `-healthcheck` flag.
   The owner's choice (2026-11-22): tunnel fixes land within
   podman-auto-update's 2 hours.
-- **sadbox/claude-routines:** no package ecosystems, and no CI: its
-  ruleset requires signed commits, linear history and no force-push or
-  deletion, but not pull requests (the owner pushes routine prompts
-  straight to main). No workflow lockfile and no "Require lockfile"
-  policy: its one workflow, escalate.yaml, uses no actions.
 - Being brought in line (remove each entry when done):
   - amd64-only tests: linkclean.
   - govulncheck blind spot, rproxy (Caddy): Dependabot alerts on
