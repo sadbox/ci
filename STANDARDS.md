@@ -105,6 +105,9 @@ in CI:
   one (`@v7`, `@main`), which would accept any commit in its history,
   rollbacks included. A workflow not yet onboarded keeps the previous rule:
   every `uses:` pinned by full commit SHA with a `# vX.Y.Z` comment.
+  The runner enforces an onboarded workflow's lockfile with or without the
+  policy: a `uses:` it doesn't list (a SHA pin included) fails the run
+  before any job starts (seen on sadbox/ci#8, 2026-11-22).
 - **Cross-repository reusable workflows** (job-level `uses:` of
   sadbox/ci, sadbox/dep-review) by full commit SHA with a `# vX.Y.Z`
   comment: the lockfile does not pin them. The called repository is
