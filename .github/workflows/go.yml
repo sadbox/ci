@@ -95,7 +95,7 @@ jobs:
       GOLANGCI_CONFIG_INPUT: ${{ inputs.golangci-config }}
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -114,11 +114,10 @@ jobs:
           echo "sadbox/ci at $CI_REPO@$CI_SHA"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.4.1
-
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build the test target for ${{ matrix.platform }}
         id: build
-        uses: docker/build-push-action@v7.4.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile }}
@@ -145,7 +144,7 @@ jobs:
       # The key changes only with go.sum; a miss starts from this
       # platform's newest older cache.
       - name: Go build cache
-        uses: actions/cache@v6.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/sadbox-ci-gocache
           key: sadbox-ci-go-${{ matrix.platform }}-${{ steps.go.outputs.version }}-${{ inputs.context }}-${{ hashFiles(format('{0}/**/go.sum', inputs.context)) }}
@@ -153,7 +152,7 @@ jobs:
 
       - name: golangci-lint and govulncheck binaries
         id: tools-cache
-        uses: actions/cache@v6.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/sadbox-ci-bin
           key: sadbox-ci-tools-${{ matrix.platform }}-${{ steps.go.outputs.version }}-${{ steps.go.outputs.tools }}
@@ -208,7 +207,7 @@ jobs:
       GOLANGCI_CONFIG_INPUT: ${{ inputs.golangci-config }}
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -227,7 +226,7 @@ jobs:
           echo "sadbox/ci at $CI_REPO@$CI_SHA"
 
       - name: Set up Go ${{ matrix.go }}
-        uses: actions/setup-go@v7.1.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: ${{ !endsWith(matrix.go, 'go.mod') && matrix.go || '' }}
           go-version-file: ${{ endsWith(matrix.go, 'go.mod') && matrix.go || '' }}
@@ -242,7 +241,7 @@ jobs:
 
       - name: golangci-lint and govulncheck binaries
         id: tools-cache
-        uses: actions/cache@v6.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/sadbox-ci-bin
           key: sadbox-ci-tools-${{ matrix.platform }}-${{ steps.go.outputs.version }}-${{ steps.go.outputs.tools }}

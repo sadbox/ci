@@ -111,6 +111,12 @@ in CI:
   onboarded to its own lockfile first, and a caller onboards only once it
   pins a callee commit that contains `actions.lock`. Same-repository calls
   (`uses: ./.github/workflows/…`) carry no ref.
+- **Steps inside a reusable workflow other repositories call** (sadbox/ci's
+  `go.yml` and `lint.yml`) keep full commit SHA pins with a `# vX.Y.Z`
+  comment as well as their lockfile entries. GitHub documents the callee's
+  lockfile as governing them, but gh-actions-lock lists cross-repository
+  reusable workflows as not locked (github/gh-actions-lock#179), so the
+  pin is kept until that is settled. `--verify` accepts it (a warning).
 - **Images in workflows** (`docker://` steps, job `container:` and
   `services:`) pinned `tag@sha256:<digest>`: the lockfile does not cover
   them.
