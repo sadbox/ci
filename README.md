@@ -38,10 +38,12 @@ branch or a tag directly.
 The jobs need `contents: read` and nothing else: no secrets (zizmor's
 online audits use the job's read-only token). The required status checks
 are the jobs' names, e.g. `go / test (linux/amd64)`,
-`go / test (linux/arm64)` and `lint / lint`. lint.yml is one job (every
-linter is a step of it, skipped where it doesn't apply), so it is one
-required check; before v0.2.0 it was one job per linter (`lint / actionlint`,
-`lint / zizmor`, ...).
+`go / test (linux/arm64)`, `lint / lint` and, where there is an ansible
+directory, `lint / ansible`. lint.yml runs every linter as a step of one
+job (skipped where it doesn't apply) except ansible, which runs code on
+the host and so gets a runner of its own. Before v0.2.0 it was one job per
+linter (`lint / actionlint`, `lint / zizmor`, ...); a skipped job counts as
+passing.
 
 ### go.yml
 

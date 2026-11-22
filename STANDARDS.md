@@ -159,9 +159,10 @@ stay with Ansible.
   also called (`workflow_call`) cancels only when it runs as itself
   (`github.workflow`), as in `examples/ci.yaml`.
 - **Few jobs.** On private repositories each job bills at least a whole
-  minute, so checks that take seconds are steps of one job (lint.yml is one
-  job), not a job each. A new job is for another runner or real
-  parallelism.
+  minute, so checks that take seconds are steps of one job (lint.yml's
+  `lint`), not a job each. A new job is for another runner, real
+  parallelism, or isolation: a step that runs untrusted code on the host
+  (lint.yml's `ansible`) can forge the result of every step after it.
 - **Path-gated work** reports through one job that always runs: a detect
   step decides, the expensive jobs skip by `if:`, and an aggregate job
   (`needs:` them, `if: always()`) fails unless each succeeded or was

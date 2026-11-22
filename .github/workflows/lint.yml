@@ -1,10 +1,18 @@
 # The linters and vulnerability checks for everything but Go (STANDARDS.md,
 # Other languages), run only where they apply: a detect step looks at the
-# repository's tracked files, and each linter is a step of the one `lint`
-# job, skipped when there is nothing for it. One job, not one per linter:
-# each job bills at least a minute and most linters take seconds. Every
+# repository's tracked files, and each linter is a step of the `lint` job,
+# skipped when there is nothing for it. One job, not one per linter: each
+# job bills at least a minute and most linters take seconds. Every
 # applicable linter runs even after another fails, and the job fails if any
 # did; the failing step names the linter.
+#
+# Sharing a runner is safe because no step there runs the repository's or
+# its dependencies' code on the host: every tool runs in a container with
+# the checkout mounted read-only, except npm, whose container writes
+# node_modules into the checkout (and eslint runs the repository's config),
+# so npm comes last. ansible runs on the host (uv installs, the
+# repository's plugins, ansible-lint), so it keeps a job of its own: there
+# it could forge only its own result.
 #
 #   actionlint, zizmor    always (every repository has workflows)
 #   shellcheck            *.sh/*.bash/*.ksh/*.dash and sh/bash shebangs
@@ -93,6 +101,7 @@ jobs:
       EXCLUDE: ${{ inputs.exclude }}
       ANSIBLE_DIRECTORY: ${{ inputs.ansible-directory }}
     outputs:
+      ansible: ${{ steps.detect.outputs.ansible }}
       linters: ${{ steps.detect.outputs.linters }}
     steps:
       - name: Check out the repository
@@ -176,25 +185,8 @@ jobs:
           TFLINT_CONFIG: ${{ inputs.tflint-config }}
         run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" tflint
 
-      - name: ansible (uv and the locked environments)
-        id: ansible-setup
-        if: ${{ !cancelled() && steps.detect.outputs.ansible == 'true' }}
-        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/ansible.sh" setup
-
-      - name: ansible-playbook --syntax-check
-        if: ${{ !cancelled() && steps.ansible-setup.outcome == 'success' }}
-        env:
-          ANSIBLE_PLAYBOOKS: ${{ inputs.ansible-playbooks }}
-        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/ansible.sh" syntax
-
-      - name: ansible-lint
-        if: ${{ !cancelled() && steps.ansible-setup.outcome == 'success' }}
-        env:
-          ANSIBLE_LINT_CONFIG: ${{ inputs.ansible-lint-config }}
-        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/ansible.sh" lint
-
-      # Last: npm ci writes node_modules into the checkout (untracked, so the
-      # linters above, which lint tracked files, never saw it either way).
+      # Last: npm's container writes node_modules into the checkout, and
+      # eslint runs the repository's config there (see the top).
       - name: npm ci (no scripts)
         if: ${{ !cancelled() && steps.detect.outputs.npm == 'true' }}
         run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" npm-ci
@@ -210,3 +202,47 @@ jobs:
       - name: eslint (where configured)
         if: ${{ !cancelled() && steps.detect.outputs.eslint == 'true' }}
         run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" eslint
+
+  # On the host, so on a runner of its own (see the top).
+  ansible:
+    needs: lint
+    if: ${{ !cancelled() && needs.lint.outputs.ansible == 'true' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      ANSIBLE_DIRECTORY: ${{ inputs.ansible-directory }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch sadbox/ci at this workflow's commit
+        env:
+          CI_REPO: ${{ job.workflow_repository }}
+          CI_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [ -z "$CI_REPO" ] || [ -z "$CI_SHA" ]; then
+            echo "::error::job.workflow_repository or job.workflow_sha is empty"
+            exit 1
+          fi
+          git init -q "$RUNNER_TEMP/sadbox-ci"
+          git -C "$RUNNER_TEMP/sadbox-ci" fetch -q --depth 1 "https://github.com/$CI_REPO" "$CI_SHA"
+          git -C "$RUNNER_TEMP/sadbox-ci" checkout -q FETCH_HEAD
+          echo "sadbox/ci at $CI_REPO@$CI_SHA"
+
+      - name: uv and the locked environments
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/ansible.sh" setup
+
+      - name: ansible-playbook --syntax-check
+        env:
+          ANSIBLE_PLAYBOOKS: ${{ inputs.ansible-playbooks }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/ansible.sh" syntax
+
+      - name: ansible-lint
+        if: ${{ !cancelled() }}
+        env:
+          ANSIBLE_LINT_CONFIG: ${{ inputs.ansible-lint-config }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/ansible.sh" lint
