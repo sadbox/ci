@@ -98,8 +98,8 @@ in CI:
 
 - **Workflow lockfile.** Every workflow is onboarded to
   `.github/workflows/actions.lock` with `gh actions-lock` (the extension
-  installed at a pinned version, v0.4.1, the one lint.yml runs), in the same PR that adds or changes the
-  workflow: Dependabot regenerates entries for onboarded workflows but
+  installed at a pinned version, v0.4.1, the one lint.yml runs), in the
+  same PR that adds or changes the workflow: Dependabot regenerates entries for onboarded workflows but
   never onboards one. This pins step-level actions and their transitive
   actions. Step `uses:` names an exact tag (`@v7.0.1`), never a floating
   one (`@v7`, `@main`), which would accept any commit in its history,
