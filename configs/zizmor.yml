@@ -23,6 +23,12 @@ rules:
     ignore:
       - dep-review.yaml
 
+  # STANDARDS.md: Actions caches are allowed (owner, 2026-11-22). What this
+  # audit flags, a cache entry written from the default branch's scope and
+  # restored by a publish, is an accepted risk, traded for build times.
+  cache-poisoning:
+    disable: true
+
   # The `uses: $/...` self-repository syntax (July 2026) is what this
   # suggests, but actionlint 1.7.12 rejects it. Re-enable, and move the
   # `./` references over, once actionlint accepts it.

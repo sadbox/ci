@@ -55,6 +55,8 @@ out=$(SKIP="zizmor, npm" bash scripts/detect.sh)
 grep -qx 'zizmor=false' <<<"$out" || fail "detect.sh ran a skipped linter"
 grep -qx 'npm=false' <<<"$out" || fail "detect.sh ran a skipped linter"
 grep -qx 'shellcheck=true' <<<"$out" || fail "detect.sh missed this repository's shell scripts"
+if git ls-files --error-unmatch .github/workflows/actions.lock >/dev/null 2>&1; then want=true; else want=false; fi
+grep -qx "actions-lock=$want" <<<"$out" || fail "detect.sh got actions-lock wrong (want $want)"
 
 # files.sh: shebang detection, $EXCLUDE, and Dockerfiles but not their
 # .dockerignore files.

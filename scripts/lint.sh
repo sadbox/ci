@@ -65,6 +65,22 @@ zizmor)
   fi
   ;;
 
+actions-lock)
+  # gh-actions-lock, pinned here by version and the release asset's sha256
+  # (bump both together; Dependabot can't see this pin). Run as a plain
+  # binary: no gh CLI or extension install on the runner.
+  version=v0.4.1
+  sha256=39deb2fe714dbf74b073d8245fc7f3d50cd0eee18d5c0900e9e849ae933ae17e
+  bin=$RUNNER_TEMP/gh-actions-lock
+  curl -fsSL --proto '=https' -o "$bin" \
+    "https://github.com/github/gh-actions-lock/releases/download/$version/linux-amd64"
+  echo "$sha256  $bin" | sha256sum -c -
+  chmod +x "$bin"
+  # Frozen check, the job's read-only token for the API lookups: fails if
+  # the lockfile is incomplete or the runner would reject a pin.
+  "$bin" --verify --no-interactive
+  ;;
+
 shellcheck)
   mapfile -d '' list < <(files shell)
   printf '%s\n' "${list[@]}"
