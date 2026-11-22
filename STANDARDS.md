@@ -72,14 +72,8 @@ in CI:
   (`actions/attest-build-provenance`) on public repositories only: on
   private ones they need GitHub Enterprise Cloud, which isn't worth paying
   for here. Private images go without them; that is not a deviation.
-- **Build cache in GHCR, written only by the publish job:**
-  `type=registry,ref=ghcr.io/<owner>/<image>:buildcache-<arch>,mode=max`
-  as `cache-to` and `cache-from` there (the only job with
-  `packages: write`). Test and PR builds may `cache-from` it, never
-  `cache-to`. `buildcache-*` tags are never deployed. BuildKit cache
-  mounts (`RUN --mount=type=cache`) are not exported to a registry cache,
-  so a publish recompiles whatever its cached layers don't cover; that cost
-  is accepted (no buildkit-cache-dance, see [GitHub Actions](#github-actions)).
+- **Build cache:** the Actions cache (`type=gha`, one scope per runner
+  architecture) is allowed, see [GitHub Actions](#github-actions).
 - **`.dockerignore`** in every repository with a Dockerfile (at least
   `.git` and local data).
 - **Non-root.** Every image runs as a non-root user (`nonroot` in
@@ -97,14 +91,14 @@ in CI:
 - Ports below 1024 are published by Quadlet (`PublishPort=80:8080`);
   processes inside listen on high ports.
 - `HealthCmd=["/<binary>", "-healthcheck"]` (see [Services](#services)).
-- Image policy: services deployed by the deploy tool use the `prod` tag it
-  moves; the others use `:latest` with `AutoUpdate=registry`.
+- Image policy: `:latest` with `AutoUpdate=registry`, the unit gating its
+  own start where state or config can be wrong (`ExecStartPre` checks).
 
 ## GitHub Actions
 
 - **Workflow lockfile.** Every workflow is onboarded to
   `.github/workflows/actions.lock` with `gh actions-lock` (the extension
-  installed at a pinned version), in the same PR that adds or changes the
+  installed at a pinned version, v0.4.1, the one lint.yml runs), in the same PR that adds or changes the
   workflow: Dependabot regenerates entries for onboarded workflows but
   never onboards one. This pins step-level actions and their transitive
   actions. Step `uses:` names an exact tag (`@v7.0.1`), never a floating
@@ -126,17 +120,14 @@ in CI:
 - **Require lockfile** (Settings → Actions → Policies) active on every
   repository once `--verify` passes there.
 - zizmor 1.32.0 or later (the first that accepts lockfile-pinned refs).
-- **No Actions cache anywhere in CI:** no step restores from or saves to
-  the Actions cache. No `actions/cache`, no BuildKit `type=gha` cache, no
-  buildkit-cache-dance, and caching inputs that default on are turned off
-  (`actions/setup-go` `cache: false`, `astral-sh/setup-uv`
-  `enable-cache: false`, `docker/setup-buildx-action`
-  `cache-binary: false`). The dep-review gate
-  handles untrusted dependency contents in the default branch's cache
-  scope. Entries there are first-write-wins, and every run falls back to
-  that scope (main's, and a new PR's), so one planted entry would reach
-  images and test results (a cached `go test` pass). Docker layers stay
-  warm through the GHCR build cache (see [Container images](#container-images)).
+- **Actions cache allowed** (`actions/cache`, BuildKit `type=gha`,
+  setup-go/setup-uv caching), an accepted risk (owner, 2026-11-22). The
+  dep-review gate handles untrusted dependency contents in the default
+  branch's cache scope. Entries there are first-write-wins, and every run
+  falls back to that scope (main's, and a new PR's), so a planted entry
+  could reach an image or a test result (a cached `go test` pass). Build
+  times were judged worth that risk. zizmor's `cache-poisoning` audit is
+  off in `configs/zizmor.yml` for the same reason.
 - Top-level `permissions: contents: read` (or `{}`); jobs ask for more only
   where needed (`packages: write` only on the publish job).
 - Untrusted event fields reach shells only through `env:`, never `${{ }}`
@@ -173,21 +164,21 @@ in CI:
 - **sadbox/sadbox.org:** default branch is `master`.
 - **Espresso-Aficionados/linkclean:** a library, no image; tests against a
   Go version matrix (1.26.x and stable) rather than a build image.
-- **sadbox/homelab-configs deploy tool:** built on the Mac at deploy time,
-  never published as an image.
+- **rproxy (Caddy) logs JSON**, not slog text: Caddy's own format, kept
+  by the owner's choice (2026-11-18).
 - **sadbox/claude-routines:** no package ecosystems.
 - Being brought in line (remove each entry when done):
-  - Root container: rproxy.
   - amd64-only tests: linkclean.
   - Shared host 1Password token: sprobot bots, oncall-sync.
   - `sprobot/pkg/opsecrets` imported by oncall-sync (and sprobot itself).
-  - Quadlet baseline missing: rproxy (homelab-configs#105, #107).
-  - Data not under `/var/lib/<svc>`: rproxy's is `/caddycerts`
-    (homelab-configs#105).
-  - Actions cache in `go.yml` (v0.1.1 and main): `actions/cache` for
-    GOCACHE and the tool binaries, and `type=gha` for the test target.
-    Its callers (towngear, and rproxy with homelab-configs#110) inherit
-    it until a release drops them.
+  - Default branch rulesets require signed commits, linear history, no
+    deletion and no force-push everywhere (2026-11-22); pull requests and
+    required status checks are added per repository once its lint.yml and
+    lockfile checks have landed.
+  - Workflow lockfile and `lint.yml` not yet adopted: lockfile onboarded
+    only in sadbox/ci; `lint.yml` not called by homelab-configs,
+    oncall-sync, sprobot, linkclean, svc, dep-review. "Require lockfile"
+    not on anywhere yet.
   - govulncheck blind spot, rproxy (Caddy): Dependabot alerts on
     `github.com/go-jose/go-jose/v3` <= 3.0.5 (GHSA-vvm8-gf78-28g4,
     GHSA-4w3g-jfj2-cw2q, GHSA-mgcc-cww5-fp2q) have no fixed v3 release.

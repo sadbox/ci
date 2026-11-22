@@ -12,11 +12,13 @@
 #   - npm: package-lock.json (npm audit, npm audit signatures, and eslint
 #     where configured, unless eslint is skipped)
 #   - ansible: the $ANSIBLE_DIRECTORY directory
+#   - actions-lock: a tracked .github/workflows/actions.lock (gh
+#     actions-lock --verify; a repository not yet onboarded skips it)
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 skip=" $(echo "${SKIP:-}" | tr ',' ' ' | xargs) "
-known=" actionlint zizmor shellcheck hadolint ruff osv-scanner npm eslint ansible "
+known=" actionlint zizmor shellcheck hadolint ruff osv-scanner npm eslint ansible actions-lock "
 for s in $skip; do
   case $known in
   *" $s "*) ;;
@@ -40,12 +42,13 @@ applies() {
   osv-scanner) has uvlock ;;
   npm) has npm ;;
   ansible) [ -d "${ANSIBLE_DIRECTORY:-ansible}" ] ;;
+  actions-lock) git ls-files --error-unmatch .github/workflows/actions.lock >/dev/null 2>&1 ;;
   esac
 }
 
 list=()
 out=${GITHUB_OUTPUT:-/dev/null}
-for k in actionlint zizmor shellcheck hadolint ruff osv-scanner npm ansible; do
+for k in actionlint zizmor shellcheck hadolint ruff osv-scanner npm ansible actions-lock; do
   v=false
   case $skip in
   *" $k "*) ;;

@@ -11,6 +11,7 @@
 #   npm                   every package-lock.json: npm audit --omit=dev,
 #                         npm audit signatures, and eslint where configured
 #   ansible               the ansible-directory: --syntax-check, ansible-lint
+#   actions-lock          .github/workflows/actions.lock: gh actions-lock --verify
 #
 # Tool versions are pinned in sadbox/ci (tools/Dockerfile for the tool
 # images, tools/ansible for ansible-lint; Dependabot bumps both), which
@@ -26,7 +27,7 @@ on:
         description: >-
           Linters not to run, whitespace- or comma-separated: actionlint,
           zizmor, shellcheck, hadolint, ruff, osv-scanner, npm, eslint,
-          ansible.
+          ansible, actions-lock.
         type: string
         default: ""
       exclude:
@@ -87,10 +88,11 @@ jobs:
       npm: ${{ steps.detect.outputs.npm }}
       eslint: ${{ steps.detect.outputs.eslint }}
       ansible: ${{ steps.detect.outputs.ansible }}
+      actions-lock: ${{ steps.detect.outputs.actions-lock }}
       linters: ${{ steps.detect.outputs.linters }}
     steps:
       - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -125,7 +127,7 @@ jobs:
       contents: read
     steps:
       - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -157,7 +159,7 @@ jobs:
       contents: read
     steps:
       - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -191,7 +193,7 @@ jobs:
       contents: read
     steps:
       - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -223,7 +225,7 @@ jobs:
       contents: read
     steps:
       - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -256,7 +258,7 @@ jobs:
       contents: read
     steps:
       - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -288,7 +290,7 @@ jobs:
       contents: read
     steps:
       - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -322,7 +324,7 @@ jobs:
       EXCLUDE: ${{ inputs.exclude }}
     steps:
       - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -366,7 +368,7 @@ jobs:
       ANSIBLE_DIRECTORY: ${{ inputs.ansible-directory }}
     steps:
       - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -397,3 +399,35 @@ jobs:
         env:
           ANSIBLE_LINT_CONFIG: ${{ inputs.ansible-lint-config }}
         run: bash "$RUNNER_TEMP/sadbox-ci/scripts/ansible.sh" lint
+
+  actions-lock:
+    needs: detect
+    if: needs.detect.outputs.actions-lock == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch sadbox/ci at this workflow's commit
+        env:
+          CI_REPO: ${{ job.workflow_repository }}
+          CI_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [ -z "$CI_REPO" ] || [ -z "$CI_SHA" ]; then
+            echo "::error::job.workflow_repository or job.workflow_sha is empty"
+            exit 1
+          fi
+          git init -q "$RUNNER_TEMP/sadbox-ci"
+          git -C "$RUNNER_TEMP/sadbox-ci" fetch -q --depth 1 "https://github.com/$CI_REPO" "$CI_SHA"
+          git -C "$RUNNER_TEMP/sadbox-ci" checkout -q FETCH_HEAD
+          echo "sadbox/ci at $CI_REPO@$CI_SHA"
+
+      - name: gh actions-lock --verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" actions-lock
