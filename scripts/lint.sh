@@ -157,6 +157,57 @@ npm-ci | npm-audit | npm-signatures | eslint)
   fi
   ;;
 
+tofu-fmt)
+  mapfile -d '' dirs < <(files tofu)
+  printf '%s\n' "${dirs[@]}"
+  run "$(image tofu)" fmt -check -diff -no-color -- "${dirs[@]}"
+  ;;
+
+tofu-validate | tflint)
+  # tofu-validate: each root (a directory with a .terraform.lock.hcl),
+  # offline from its backend (-backend=false, so no state and no
+  # credentials) and with the providers its lockfile pins and nothing
+  # else (-lockfile=readonly: a provider missing from the lockfile, or a
+  # download whose hash it doesn't list, fails). .terraform goes to a
+  # scratch directory, not the read-only checkout. tflint: every
+  # directory with *.tf files.
+  if [ "$tool" = tflint ]; then
+    mapfile -d '' dirs < <(files tofu)
+    cfg=$(config "${TFLINT_CONFIG:-}" tflint.hcl .tflint.hcl)
+    # tflint looks for .tflint.hcl in --chdir, not the repository root.
+    if [ -z "$cfg" ]; then cfg=/repo/.tflint.hcl; fi
+  else
+    mapfile -d '' dirs < <(files tofuroot)
+    if [ ${#dirs[@]} -eq 0 ]; then
+      echo "::error::*.tf files but no .terraform.lock.hcl: no root to validate (run tofu init in each root and commit its lockfile)"
+      exit 1
+    fi
+  fi
+  failed=()
+  for d in "${dirs[@]}"; do
+    echo "::group::$tool: $d"
+    if [ "$tool" = tflint ]; then
+      run "$(image tflint)" --chdir="$d" --config="$cfg" --no-color || failed+=("$d")
+    else
+      data=$(mktemp -d "${RUNNER_TEMP:-/tmp}/tofu.XXXXXX")
+      tofu=(docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo:ro" -v "$data:/tfdata"
+        -e HOME=/tfdata -e TF_DATA_DIR=/tfdata/.terraform -e TF_IN_AUTOMATION=1 -e TF_INPUT=0
+        -w "/repo/$d" "$(image tofu)")
+      if "${tofu[@]}" init -backend=false -lockfile=readonly -no-color; then
+        "${tofu[@]}" validate -no-color || failed+=("$d")
+      else
+        failed+=("$d")
+      fi
+      rm -rf "$data"
+    fi
+    echo "::endgroup::"
+  done
+  if [ ${#failed[@]} -gt 0 ]; then
+    echo "::error::$tool failed in: ${failed[*]}"
+    exit 1
+  fi
+  ;;
+
 *)
   echo "lint.sh: unknown tool $tool" >&2
   exit 2

@@ -7,6 +7,8 @@
 #   python      *.py
 #   uvlock      uv.lock
 #   npm         directories holding a package-lock.json
+#   tofu        directories holding a *.tf or *.tofu file, each once
+#   tofuroot    directories holding a .terraform.lock.hcl (OpenTofu roots)
 # Paths matching the extended regex $EXCLUDE (if set) are left out.
 set -euo pipefail
 
@@ -49,16 +51,18 @@ tracked | while IFS= read -r -d '' f; do
   uvlock)
     if [ "$base" = uv.lock ]; then printf '%s\0' "$f"; fi
     ;;
-  npm)
-    if [ "$base" = package-lock.json ]; then
+  npm | tofu | tofuroot)
+    case $kind:$base in
+    npm:package-lock.json | tofu:*.tf | tofu:*.tofu | tofuroot:.terraform.lock.hcl)
       d=${f%/*}
       if [ "$d" = "$f" ]; then d=.; fi
       printf '%s\0' "$d"
-    fi
+      ;;
+    esac
     ;;
   *)
     echo "files.sh: unknown kind $kind" >&2
     exit 2
     ;;
   esac
-done
+done | if [ "$kind" = tofu ]; then sort -zu; else cat; fi

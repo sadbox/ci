@@ -11,7 +11,7 @@ fail() {
 }
 
 # Every tool stage resolves to a tag@sha256 reference.
-for t in actionlint zizmor shellcheck hadolint ruff osv-scanner uv node; do
+for t in actionlint zizmor shellcheck hadolint ruff osv-scanner uv node tofu tflint; do
   ref=$(bash scripts/tool-image.sh "$t")
   [[ $ref == *:*@sha256:* ]] || fail "tools/Dockerfile: $t is not tag@sha256: $ref"
 done
@@ -59,7 +59,8 @@ if git ls-files --error-unmatch .github/workflows/actions.lock >/dev/null 2>&1; 
 grep -qx "actions-lock=$want" <<<"$out" || fail "detect.sh got actions-lock wrong (want $want)"
 
 # files.sh: shebang detection, $EXCLUDE, and Dockerfiles but not their
-# .dockerignore files.
+# .dockerignore files; OpenTofu directories, each once, and roots (by
+# their lockfile).
 git init -q "$tmp/repo"
 (
   cd "$tmp/repo"
@@ -71,10 +72,18 @@ git init -q "$tmp/repo"
   printf 'FROM x\n' >app.Dockerfile
   printf '*\n' >Dockerfile.dockerignore
   printf '*\n' >app.Dockerfile.dockerignore
+  mkdir -p infra/a infra/mod
+  printf "x\n" >infra/a/main.tf
+  printf "x\n" >infra/a/vars.tf
+  printf "x\n" >infra/a/.terraform.lock.hcl
+  printf "x\n" >infra/mod/m.tofu
+  printf "x\n" >top.tf
   git add .
   [ "$(bash "$root/scripts/files.sh" shell | tr '\0' ' ')" = "run.sh tool " ] || fail "files.sh shell: $(bash "$root/scripts/files.sh" shell | tr '\0' ' ')"
   [ "$(EXCLUDE='^tool$' bash "$root/scripts/files.sh" shell | tr '\0' ' ')" = "run.sh " ] || fail "files.sh: EXCLUDE"
   [ "$(bash "$root/scripts/files.sh" dockerfile | tr '\0' ' ')" = "Dockerfile.dev app.Dockerfile " ] || fail "files.sh dockerfile: $(bash "$root/scripts/files.sh" dockerfile | tr '\0' ' ')"
+  [ "$(bash "$root/scripts/files.sh" tofu | tr "\0" " ")" = ". infra/a infra/mod " ] || fail "files.sh tofu: $(bash "$root/scripts/files.sh" tofu | tr "\0" " ")"
+  [ "$(bash "$root/scripts/files.sh" tofuroot | tr "\0" " ")" = "infra/a " ] || fail "files.sh tofuroot: $(bash "$root/scripts/files.sh" tofuroot | tr "\0" " ")"
 )
 
 # dep-review-triggers.sh: the gate's caller may use workflow_run, never

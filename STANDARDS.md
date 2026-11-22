@@ -52,6 +52,36 @@ in CI:
 | GitHub Actions | actionlint, zizmor | zizmor (known-vulnerable actions) |
 | Dockerfiles | hadolint | the image's packages via the dep-review gate |
 | Ansible | ansible-lint, `--syntax-check` | – |
+| OpenTofu | `tofu fmt -check`, `tofu validate`, tflint | – (providers pinned by version and lockfile hash; each bump reviewed by a human, see [OpenTofu](#opentofu)) |
+
+## OpenTofu
+
+For hosted services (DNS, monitoring, GitHub settings), not hosts: hosts
+stay with Ansible.
+
+- **OpenTofu, not Terraform.**
+- **State encrypted on the client, enforced.** Every root has an
+  `encryption` block (`pbkdf2` key provider, `aes_gcm` method) with
+  `enforced = true` for both `state` and `plan`. The passphrase is a
+  sensitive variable, randomly generated (not chosen) and supplied from
+  1Password at run time, never written to a file. Without it `init`,
+  `plan` and `apply` refuse to run, so a bare `tofu apply` can't write
+  plaintext state.
+- **Credentials only from 1Password, on the operator's machine**
+  (`op run`), for attended plans and applies. CI holds none: it runs
+  lint.yml's `tofu` job only (`fmt`, `validate` with `-backend=false`,
+  tflint).
+- **Versions pinned:** `required_version`, an exact `version` for every
+  provider, and each root's `.terraform.lock.hcl` committed with hashes for
+  linux_amd64, linux_arm64 and darwin_arm64 (`tofu providers lock
+  -platform=…`). CI's `init` is `-lockfile=readonly`.
+- **Dependabot:** the `opentofu` ecosystem, one entry per root directory.
+  The dep-review gate doesn't handle it (a branch for an ecosystem it
+  doesn't know is classified unverified), so every bump goes to a human:
+  read the provider's changelog, and plan with no unexpected changes
+  before merging.
+- **Existing resources are imported** with `import` blocks, and the first
+  apply follows a plan that shows no changes.
 
 ## Container images
 
