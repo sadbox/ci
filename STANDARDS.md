@@ -218,8 +218,6 @@ stay with Ansible.
   policy: its one workflow, escalate.yaml, uses no actions.
 - Being brought in line (remove each entry when done):
   - amd64-only tests: linkclean.
-  - `lint.yml` not called by sadbox/dep-review (its workflows are on a
-    lockfile).
   - govulncheck blind spot, rproxy (Caddy): Dependabot alerts on
     `github.com/go-jose/go-jose/v3` <= 3.0.5 (GHSA-vvm8-gf78-28g4,
     GHSA-4w3g-jfj2-cw2q, GHSA-mgcc-cww5-fp2q) have no fixed v3 release.
