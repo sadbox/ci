@@ -76,9 +76,8 @@ stay with Ansible.
   linux_amd64, linux_arm64 and darwin_arm64 (`tofu providers lock
   -platform=…`). CI's `init` is `-lockfile=readonly`.
 - **Dependabot:** the `opentofu` ecosystem, one entry per root directory.
-  The dep-review gate doesn't handle it (it classifies a
-  `dependabot/opentofu/…` branch as unverified), so every bump goes to a
-  human: read the provider's changelog, and plan with no unexpected
+  The dep-review gate doesn't handle it (a branch for an ecosystem it
+  doesn't know is classified unverified), so every bump goes to a human: read the provider's changelog, and plan with no unexpected
   changes before merging.
 - **Existing resources are imported** with `import` blocks, and the first
   apply follows a plan that shows no changes.
