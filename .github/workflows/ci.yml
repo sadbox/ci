@@ -65,8 +65,9 @@ jobs:
       - name: scripts/selftest.sh
         run: bash scripts/selftest.sh
 
-      # The action as a caller runs it (action.yml and its wiring, which
-      # selftest.sh can't reach), against the same local listener.
+      # The action as a caller runs it (action.yml and its wiring, and the
+      # commit's place in history from GitHub's real API, which selftest.sh
+      # can't reach), against the same local listener.
       - name: A listener for report-publish
         id: listener
         run: |
@@ -88,5 +89,5 @@ jobs:
         run: |
           cat "$RUNNER_TEMP/got"
           for name in gosvc other-svc; do
-            grep -Eqx "sadbox_image_published,name=${name},version=${GITHUB_SHA:0:7} timestamp_seconds=[0-9]{10}" "$RUNNER_TEMP/got"
+            grep -Eqx "sadbox_image_published,name=${name},version=${GITHUB_SHA:0:7} timestamp_seconds=[0-9]{10},commits=[1-9][0-9]*" "$RUNNER_TEMP/got"
           done

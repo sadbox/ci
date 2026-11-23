@@ -3,21 +3,38 @@ description: >-
   Tell Grafana Cloud which build of an image :latest now is, so an alert can
   say when the host isn't running it.
 
-# One sample per image, sadbox_image_published_timestamp_seconds{name,
-# version} = now, over Grafana Cloud's Influx line-protocol endpoint
-# (curl; no dependencies). Run it as the step after the one that moves
-# :latest, in a job in the repository's `publish` environment, which holds
-# the two secrets and is limited to the default branch (STANDARDS.md,
-# Container images). A failed report fails the job: the image is published
-# either way, and a re-run reports it.
+# One sample per image over Grafana Cloud's Influx line-protocol endpoint
+# (curl; no dependencies): when, and the build's place in the repository's
+# history (report.sh). Two uses, both in a job in the repository's
+# `publish` environment, which holds the two secrets and is limited to the
+# default branch (STANDARDS.md, Container images):
+#
+# - `names`: the step after the one that moves :latest, for the images it
+#   just moved;
+# - `latest-of`: a daily scheduled job, after a registry login, for what
+#   :latest is now: it repairs a report that was missed.
+#
+# The job needs `contents: read` (the commit's place in history comes from
+# GitHub's API with the job's token), and for `latest-of`, `packages: read`.
+# A failed report fails the job: the image is published either way, and a
+# re-run (or the next scheduled run) reports it.
 inputs:
   names:
     description: >-
-      The images just published, by the name of the container that runs
-      each on the host (the image's last path component), space-separated.
-    required: true
+      The images this run just made :latest, by the name of the container
+      that runs each on the host (the image's last path component),
+      space-separated.
+    required: false
+    default: ""
+  latest-of:
+    description: >-
+      Instead of names: image repositories (ghcr.io/owner/name),
+      space-separated. Reports what each one's :latest is now, by its
+      org.opencontainers.image.revision label.
+    required: false
+    default: ""
   version:
-    description: "The build, as the host reports it. Default: the commit's first 7 characters."
+    description: "With names: the build, as the host reports it. Default: the commit's first 7 characters."
     required: false
     default: ""
   url:
@@ -34,8 +51,10 @@ runs:
       shell: bash
       env:
         REPORT_NAMES: ${{ inputs.names }}
+        REPORT_LATEST_OF: ${{ inputs.latest-of }}
         REPORT_VERSION: ${{ inputs.version }}
         REPORT_URL: ${{ inputs.url }}
         REPORT_AUTH: ${{ inputs.auth }}
+        GH_TOKEN: ${{ github.token }}
         ACTION_PATH: ${{ github.action_path }}
       run: bash "$ACTION_PATH/report.sh"
