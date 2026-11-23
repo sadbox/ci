@@ -238,6 +238,16 @@ stay with Ansible.
   `cloudflared tunnel ready`, the binary's own, not a `-healthcheck` flag.
   The owner's choice (2026-11-22): tunnel fixes land within
   podman-auto-update's 2 hours.
+- **egress (homelab-configs, the outbound proxy):** Smokescreen v2
+  (`github.com/stripe/smokescreen/v2`) is pinned to an untagged
+  pseudo-version, since v2 has no tags yet, and Dependabot never moves a
+  pseudo-version. `.github/workflows/smokescreen-bump.yaml` moves it
+  weekly instead, to the newest master commit whose pull request merged at
+  least 14 days ago (the cooldown, measured by `merged_at`, not the commit's
+  own date), through a PR a person merges, not the dep-review gate. The
+  rest of `egress/go.mod` and its base images are Dependabot's as usual.
+  The owner's choice (2026-11-22): v2 is where Smokescreen's development
+  is; remove this entry once v2 is tagged.
 - Being brought in line (remove each entry when done):
   - amd64-only tests: linkclean.
   - govulncheck blind spot, rproxy (Caddy): Dependabot alerts on
