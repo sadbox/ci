@@ -105,14 +105,18 @@ stay with Ansible.
 - **Publish report.** The step after the one that moves `:latest` is
   sadbox/ci's `report-publish` action, once for the images the host runs
   (`names:` each container's name there). It records the build in Grafana
-  Cloud (`sadbox_image_published_timestamp_seconds{name, version}`), which
-  an alert compares with what the host runs: a build published and not
-  running hours later is an update that didn't land. Its two secrets
-  (`GRAFANA_PUBLISH_URL`, `GRAFANA_PUBLISH_AUTH`) are in the repository's
-  `publish` environment, limited to the default branch (homelab-configs
-  `tofu/github`), and the job that moves `:latest` runs in it: the token
-  can write any series in the stack, so no other branch's workflow may
-  read it. A failed report fails the job (a re-run reports it).
+  Cloud, when and where it sits in the repository's history
+  (`sadbox_image_published_timestamp_seconds` and `..._commits`, by
+  `name` and `version`), which an alert compares with what the host runs:
+  a build newer in git history than the running one, published and not
+  running hours later, is an update that didn't land. A second workflow,
+  `report-latest.yaml`, runs the action daily with `latest-of:` (what
+  `:latest` is now, from the registry), which repairs a report that was
+  missed. The two secrets (`GRAFANA_PUBLISH_URL`, `GRAFANA_PUBLISH_AUTH`)
+  are in the repository's `publish` environment, limited to the default
+  branch (homelab-configs `tofu/github`), and both jobs run in it: the
+  token can write any series in the stack, so no other branch's workflow
+  may read it. A failed report fails the job (a re-run reports it).
 - **Build cache:** the Actions cache (`type=gha`, one scope per runner
   architecture) is allowed, see [GitHub Actions](#github-actions).
 - **`.dockerignore`** in every repository with a Dockerfile (at least
@@ -163,7 +167,8 @@ stay with Ansible.
   [Repository settings](#repository-settings)).
 - **Triggers:** `pull_request`, plus `push` to the default branch only. A
   push trigger on every branch runs everything twice for each commit to a
-  PR (once for the push, once for the PR).
+  PR (once for the push, once for the PR). `schedule` for the dep-review
+  sweep and the daily publish report (`report-latest.yaml`) only.
 - **Concurrency:** a PR's new run cancels the one it supersedes; no other
   run cancels or waits:
   `group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}`

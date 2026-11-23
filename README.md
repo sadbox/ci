@@ -130,6 +130,9 @@ environment:
 ```yaml
   publish-merge:
     environment: publish # holds the two secrets; the default branch only
+    permissions:
+      contents: read # the commit's place in history, from GitHub's API
+      packages: write
     steps:
       # ... the step that moves :latest ...
       - name: Tell Grafana what :latest now is
@@ -140,22 +143,63 @@ environment:
           auth: ${{ secrets.GRAFANA_PUBLISH_AUTH }}
 ```
 
-It sends one sample per name to Grafana Cloud's Influx line-protocol
-endpoint: `sadbox_image_published_timestamp_seconds{name, version}`, the
-time of the report. `names` are the containers that run the images on the
-host (what its `sadbox_container_info` calls them), so the two series
-join. A step-level action: the caller names the tag and `gh actions-lock`
-pins the commit (STANDARDS.md, GitHub Actions).
+And once a day, in a workflow of its own (`report-latest.yaml`), what
+`:latest` is now, read from the registry: it repairs a report that was
+missed, so the reports can't stay wrong for more than a day.
+
+```yaml
+on:
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  report-latest:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    environment: publish
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@vX.Y.Z
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Tell Grafana what :latest is
+        uses: sadbox/ci/report-publish@vX.Y.Z
+        with:
+          latest-of: ghcr.io/espresso-aficionados/sprobot ghcr.io/espresso-aficionados/stickybot
+          url: ${{ secrets.GRAFANA_PUBLISH_URL }}
+          auth: ${{ secrets.GRAFANA_PUBLISH_AUTH }}
+```
+
+Either way it sends one sample per image to Grafana Cloud's Influx
+line-protocol endpoint, two series by `name` and `version`:
+`sadbox_image_published_timestamp_seconds`, the time of the report, and
+`sadbox_image_published_commits`, the build's place in the repository's
+history (how many commits it has behind it, from GitHub's API). History on
+a default branch only grows, so the higher number is the newer build
+whatever order the reports arrived in. The name is the container that runs
+the image on the host (what its `sadbox_container_info` calls it; with
+`latest-of`, the image's last path component), so the series join. A
+step-level action: the caller names the tag and `gh actions-lock` pins the
+commit (STANDARDS.md, GitHub Actions).
 
 | Input | Default | |
 |---|---|---|
-| `names` | | Space-separated; each `[a-z0-9][a-z0-9-]*`. |
-| `version` | the commit's first 7 characters | What the host reports as the build. |
+| `names` | | Space-separated; each `[a-z0-9][a-z0-9-]*`. The images this run just made `:latest`, at its commit. |
+| `latest-of` | | Instead of `names`: image repositories, space-separated. What each one's `:latest` is now, by its `org.opencontainers.image.revision` label. |
+| `version` | the commit's first 7 characters | With `names`: what the host reports as the build. |
 | `url`, `auth` | | The `publish` environment's secrets. `auth` is `<instance id>:<token>`, a `metrics:write` token. |
 
-It fails the job when the report isn't accepted or the secrets are
-missing (a job outside the environment, or not on the default branch),
-and never prints the endpoint or the credentials.
+It fails the job when the report isn't accepted, a commit or a label can't
+be found, or the secrets are missing (a job outside the environment, or
+not on the default branch), and never prints the endpoint or the
+credentials.
 
 ## Configuration
 

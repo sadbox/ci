@@ -101,11 +101,39 @@ mkdir -p "$tmp/dr/.github/workflows"
 )
 
 # report-publish/report.sh, against a local listener that records what it
-# was sent (testdata/report-publish/listen.py): one line per image, the credentials as basic auth, the
-# commit's first 7 characters by default; a refused report or a bad input
-# fails, and never names the endpoint (a public repository's log).
+# was sent (testdata/report-publish/listen.py), with stand-ins for gh (a
+# commit's place in history) and docker (an image's revision label): one
+# line per image, the credentials as basic auth; a refused report or a bad
+# input fails, and never names the endpoint (a public repository's log).
 command -v python3 >/dev/null || fail "selftest needs python3 (report-publish's listener)"
-mkdir -p "$tmp/rp"
+command -v jq >/dev/null || fail "selftest needs jq (report-publish)"
+mkdir -p "$tmp/rp/bin"
+a=$(printf 'a%.0s' $(seq 40)) b=$(printf 'b%.0s' $(seq 40)) head=0123456789abcdef0123456789abcdef01234567
+cat >"$tmp/rp/bin/gh" <<SH
+#!/usr/bin/env bash
+# gh api graphql ... -f o=<owner> -f n=<repo> -f oid=<sha>: the commit's totalCount.
+[[ " \$* " == *" o=sadbox "* && " \$* " == *" n=ci "* ]] || exit 1
+case " \$* " in
+*" oid=$head "*) echo 192 ;;
+*" oid=$a "*) echo 584 ;;
+*" oid=$b "*) echo 585 ;;
+*) ;; # not a commit here: nothing
+esac
+SH
+cat >"$tmp/rp/bin/docker" <<SH
+#!/usr/bin/env bash
+# docker buildx imagetools inspect <ref>:latest --format '{{json .Image}}'
+index() { printf '{"linux/amd64":{"config":{"Labels":{"org.opencontainers.image.revision":"%s"}}},"linux/arm64":{"config":{"Labels":{"org.opencontainers.image.revision":"%s"}}}}\n' "\$1" "\$2"; }
+case "\$4" in
+ghcr.io/x/sprobot:latest) index $a $a ;;
+ghcr.io/x/threadbot:latest) index $b $b ;;
+ghcr.io/x/mixed:latest) index $a $b ;;
+ghcr.io/x/elsewhere:latest) index ${a//a/c} ${a//a/c} ;;
+ghcr.io/x/nolabel:latest) echo '{"linux/amd64":{"config":{"Labels":{}}}}' ;;
+*) exit 1 ;;
+esac
+SH
+chmod +x "$tmp/rp/bin/gh" "$tmp/rp/bin/docker"
 listen() { # listen <status>: sets $port and $listener
   rm -f "$tmp/rp/got" "$tmp/rp/port"
   python3 "$root/testdata/report-publish/listen.py" "$tmp/rp/got" "$1" >"$tmp/rp/port" &
@@ -117,8 +145,11 @@ listen() { # listen <status>: sets $port and $listener
   port=$(cat "$tmp/rp/port")
   [ -n "$port" ] || fail "report-publish: the listener didn't start"
 }
-report() { env -i PATH="$PATH" GITHUB_SHA=0123456789abcdef0123456789abcdef01234567 "$@" bash "$root/report-publish/report.sh"; }
+report() {
+  env -i PATH="$tmp/rp/bin:$PATH" GITHUB_SHA=$head GITHUB_REPOSITORY=sadbox/ci GH_TOKEN=x "$@" bash "$root/report-publish/report.sh"
+}
 
+# The images a run just published, at its own commit.
 listen 204
 report REPORT_NAMES="sprobot stickybot" REPORT_URL="http://127.0.0.1:$port/api/v1/push/influx/write" REPORT_AUTH='12345:glc_to"k\en=' >"$tmp/rp/out" 2>&1 ||
   { cat "$tmp/rp/out"; fail "report-publish: an accepted report failed"; }
@@ -129,22 +160,36 @@ kill "$listener"
 [ "$path" = /api/v1/push/influx/write ] || fail "report-publish: path $path"
 [ "$auth" = '12345:glc_to"k\en=' ] || fail "report-publish: basic auth was $auth"
 [ "$ctype" = text/plain ] || fail "report-publish: content type $ctype"
-[[ $one =~ ^sadbox_image_published,name=sprobot,version=0123456\ timestamp_seconds=[0-9]{10}$ ]] || fail "report-publish: first line: $one"
-[[ $two =~ ^sadbox_image_published,name=stickybot,version=0123456\ timestamp_seconds=[0-9]{10}$ ]] || fail "report-publish: second line: $two"
-grep -qx 'reported sprobot stickybot at 0123456' "$tmp/rp/out" || fail "report-publish: said $(cat "$tmp/rp/out")"
+[[ $one =~ ^sadbox_image_published,name=sprobot,version=0123456\ timestamp_seconds=[0-9]{10},commits=192$ ]] || fail "report-publish: first line: $one"
+[[ $two =~ ^sadbox_image_published,name=stickybot,version=0123456\ timestamp_seconds=[0-9]{10},commits=192$ ]] || fail "report-publish: second line: $two"
+grep -qx 'reported sprobot at 0123456 (commit 192)' "$tmp/rp/out" || fail "report-publish: said $(cat "$tmp/rp/out")"
+
+# What :latest is now (the scheduled run): each image's own revision.
+listen 204
+report REPORT_LATEST_OF="ghcr.io/x/sprobot ghcr.io/x/threadbot" REPORT_URL="http://127.0.0.1:$port/w" REPORT_AUTH=1:t >"$tmp/rp/out" 2>&1 ||
+  { cat "$tmp/rp/out"; fail "report-publish: latest-of failed"; }
+kill "$listener"
+grep -Eqx 'sadbox_image_published,name=sprobot,version=aaaaaaa timestamp_seconds=[0-9]{10},commits=584' "$tmp/rp/got" || fail "report-publish: latest-of sent $(cat "$tmp/rp/got")"
+grep -Eqx 'sadbox_image_published,name=threadbot,version=bbbbbbb timestamp_seconds=[0-9]{10},commits=585' "$tmp/rp/got" || fail "report-publish: latest-of sent $(cat "$tmp/rp/got")"
 
 listen 401
-if report REPORT_NAMES=sprobot REPORT_VERSION=abcdef0 REPORT_URL="http://127.0.0.1:$port/secret-path" REPORT_AUTH=12345:wrong >"$tmp/rp/out" 2>&1; then
+if report REPORT_NAMES=sprobot REPORT_URL="http://127.0.0.1:$port/secret-path" REPORT_AUTH=12345:wrong >"$tmp/rp/out" 2>&1; then
   fail "report-publish: a refused report passed"
 fi
 kill "$listener"
 grep -q 'HTTP 401' "$tmp/rp/out" || fail "report-publish: a refused report didn't give the status: $(cat "$tmp/rp/out")"
 if grep -q -e 127.0.0.1 -e secret-path -e wrong "$tmp/rp/out"; then fail "report-publish: a failure named the endpoint or the credentials"; fi
 
-# Nothing is sent for a bad name or version, or without the secrets.
+# Nothing is sent for a bad name, version or image, a commit or a label
+# that can't be found, both modes at once, neither, or without the secrets.
 listen 204
-for bad in 'REPORT_NAMES=Sprobot' 'REPORT_NAMES=a,b=c' 'REPORT_NAMES=' 'REPORT_VERSION=0123456789' 'REPORT_VERSION=main' 'REPORT_AUTH=' 'REPORT_URL='; do
-  args=(REPORT_NAMES=sprobot REPORT_URL="http://127.0.0.1:$port/" REPORT_AUTH=1:t "$bad")
+for bad in 'REPORT_NAMES=Sprobot' 'REPORT_NAMES=a,b=c' 'REPORT_NAMES=' 'REPORT_VERSION=0123456789' 'REPORT_VERSION=main' \
+  'REPORT_AUTH=' 'REPORT_URL=' "GITHUB_SHA=$b$b" "GITHUB_SHA=${a//a/d}" 'REPORT_LATEST_OF=ghcr.io/x/sprobot' \
+  'REPORT_NAMES= REPORT_LATEST_OF=ghcr.io/x/mixed' 'REPORT_NAMES= REPORT_LATEST_OF=ghcr.io/x/nolabel' \
+  'REPORT_NAMES= REPORT_LATEST_OF=ghcr.io/x/missing' 'REPORT_NAMES= REPORT_LATEST_OF=ghcr.io/x/elsewhere' \
+  'REPORT_NAMES= REPORT_LATEST_OF=sprobot' 'REPORT_NAMES= REPORT_LATEST_OF=ghcr.io/x/Sprobot:latest'; do
+  read -r -a override <<<"$bad"
+  args=(REPORT_NAMES=sprobot REPORT_URL="http://127.0.0.1:$port/" REPORT_AUTH=1:t "${override[@]}")
   if report "${args[@]}" >"$tmp/rp/out" 2>&1; then fail "report-publish accepted $bad"; fi
   [ ! -e "$tmp/rp/got" ] || fail "report-publish sent a report for $bad"
 done
