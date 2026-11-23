@@ -100,4 +100,54 @@ mkdir -p "$tmp/dr/.github/workflows"
   if bash "$root/scripts/dep-review-triggers.sh" >/dev/null; then fail "dep-review-triggers.sh passed pull_request_target in dep-review.yml"; fi
 )
 
+# report-publish/report.sh, against a local listener that records what it
+# was sent (testdata/report-publish/listen.py): one line per image, the credentials as basic auth, the
+# commit's first 7 characters by default; a refused report or a bad input
+# fails, and never names the endpoint (a public repository's log).
+command -v python3 >/dev/null || fail "selftest needs python3 (report-publish's listener)"
+mkdir -p "$tmp/rp"
+listen() { # listen <status>: sets $port and $listener
+  rm -f "$tmp/rp/got" "$tmp/rp/port"
+  python3 "$root/testdata/report-publish/listen.py" "$tmp/rp/got" "$1" >"$tmp/rp/port" &
+  listener=$!
+  for _ in $(seq 50); do
+    if [ -s "$tmp/rp/port" ]; then break; fi
+    sleep 0.1
+  done
+  port=$(cat "$tmp/rp/port")
+  [ -n "$port" ] || fail "report-publish: the listener didn't start"
+}
+report() { env -i PATH="$PATH" GITHUB_SHA=0123456789abcdef0123456789abcdef01234567 "$@" bash "$root/report-publish/report.sh"; }
+
+listen 204
+report REPORT_NAMES="sprobot stickybot" REPORT_URL="http://127.0.0.1:$port/api/v1/push/influx/write" REPORT_AUTH='12345:glc_to"k\en=' >"$tmp/rp/out" 2>&1 ||
+  { cat "$tmp/rp/out"; fail "report-publish: an accepted report failed"; }
+kill "$listener"
+{
+  IFS= read -r path && IFS= read -r auth && IFS= read -r ctype && IFS= read -r one && IFS= read -r two
+} <"$tmp/rp/got" || fail "report-publish: the listener got $(cat "$tmp/rp/got")"
+[ "$path" = /api/v1/push/influx/write ] || fail "report-publish: path $path"
+[ "$auth" = '12345:glc_to"k\en=' ] || fail "report-publish: basic auth was $auth"
+[ "$ctype" = text/plain ] || fail "report-publish: content type $ctype"
+[[ $one =~ ^sadbox_image_published,name=sprobot,version=0123456\ timestamp_seconds=[0-9]{10}$ ]] || fail "report-publish: first line: $one"
+[[ $two =~ ^sadbox_image_published,name=stickybot,version=0123456\ timestamp_seconds=[0-9]{10}$ ]] || fail "report-publish: second line: $two"
+grep -qx 'reported sprobot stickybot at 0123456' "$tmp/rp/out" || fail "report-publish: said $(cat "$tmp/rp/out")"
+
+listen 401
+if report REPORT_NAMES=sprobot REPORT_VERSION=abcdef0 REPORT_URL="http://127.0.0.1:$port/secret-path" REPORT_AUTH=12345:wrong >"$tmp/rp/out" 2>&1; then
+  fail "report-publish: a refused report passed"
+fi
+kill "$listener"
+grep -q 'HTTP 401' "$tmp/rp/out" || fail "report-publish: a refused report didn't give the status: $(cat "$tmp/rp/out")"
+if grep -q -e 127.0.0.1 -e secret-path -e wrong "$tmp/rp/out"; then fail "report-publish: a failure named the endpoint or the credentials"; fi
+
+# Nothing is sent for a bad name or version, or without the secrets.
+listen 204
+for bad in 'REPORT_NAMES=Sprobot' 'REPORT_NAMES=a,b=c' 'REPORT_NAMES=' 'REPORT_VERSION=0123456789' 'REPORT_VERSION=main' 'REPORT_AUTH=' 'REPORT_URL='; do
+  args=(REPORT_NAMES=sprobot REPORT_URL="http://127.0.0.1:$port/" REPORT_AUTH=1:t "$bad")
+  if report "${args[@]}" >"$tmp/rp/out" 2>&1; then fail "report-publish accepted $bad"; fi
+  [ ! -e "$tmp/rp/got" ] || fail "report-publish sent a report for $bad"
+done
+kill "$listener"
+
 echo "selftest: ok"
