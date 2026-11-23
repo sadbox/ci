@@ -85,6 +85,20 @@ jobs:
           url: ${{ steps.listener.outputs.url }}
           auth: 1:not-a-secret
 
+      # newer-than-latest as a caller runs it, with the real registry and
+      # API: a public image built from another repository's commit, which
+      # isn't in this history, so there is nothing to move back from.
+      - name: newer-than-latest, as a caller runs it
+        id: newer
+        uses: ./newer-than-latest
+        with:
+          image: ghcr.io/espresso-aficionados/sprobot
+
+      - name: What newer-than-latest said
+        env:
+          NEWER: ${{ steps.newer.outputs.newer }}
+        run: test "$NEWER" = true
+
       - name: What the listener got
         run: |
           cat "$RUNNER_TEMP/got"

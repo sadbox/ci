@@ -11,6 +11,9 @@ The standard base for sadbox projects:
   - [`lint.yml`](.github/workflows/lint.yml): the linters and
     vulnerability checks for everything else, each run only where the
     repository has files for it.
+- [`newer-than-latest`](newer-than-latest/action.yml): the action a
+  publish workflow runs before it moves `:latest`, so a re-run of an old
+  publish can't move it back.
 - [`report-publish`](report-publish/action.yml): the action a publish
   workflow runs after it moves `:latest`, so Grafana Cloud knows which
   build the host should be running.
@@ -120,6 +123,41 @@ Files are the repository's tracked files (`git ls-files`).
 | `zizmor-online` | `true` | zizmor's online audits (known-vulnerable actions, impostor commits). |
 
 Output: `linters`, the JSON list of the linters that ran.
+
+### newer-than-latest
+
+A step before the one that moves `:latest`, after the registry login. It
+reads the commit `:latest` was built from (its
+`org.opencontainers.image.revision` label) and asks GitHub how this run's
+commit stands to it:
+
+```yaml
+      - name: Is this commit as new as :latest's?
+        id: newer
+        uses: sadbox/ci/newer-than-latest@vX.Y.Z
+        with:
+          image: ghcr.io/sadbox/rproxy
+
+      - name: Tag both platforms
+        env:
+          NEWER: ${{ steps.newer.outputs.newer }}
+        run: |
+          tags=(-t "${ref}:sha-${GITHUB_SHA::7}")
+          if [ "$NEWER" = true ]; then tags+=(-t "${ref}:latest"); fi
+          docker buildx imagetools create "${tags[@]}" "${ref}@${amd64}" "${ref}@${arm64}"
+
+      - name: Tell Grafana what :latest now is
+        if: steps.newer.outputs.newer == 'true'
+        uses: sadbox/ci/report-publish@vX.Y.Z
+        # ...
+```
+
+`newer` is `false` only when `:latest`'s commit is ahead of this one: a
+re-run of an old publish after a newer one, which would otherwise hand the
+host an older build. It is `true` when there is nothing to move back from
+(no `:latest` yet, no revision label, a commit that isn't in this
+repository's history). When the registry or the API doesn't answer, the
+step fails rather than guess. The job needs `contents: read`.
 
 ### report-publish
 
@@ -242,8 +280,8 @@ change (an input renamed, a Dockerfile requirement) is a major version.
   `testdata/gosvc` on both architectures, and `scripts/selftest.sh`).
 - `scripts/`: what the workflows run; `selftest.sh` tests their failure
   paths.
-- `report-publish/`: the action and its script (tested by `selftest.sh`
-  against a local listener).
+- `newer-than-latest/`, `report-publish/`: the actions and their scripts
+  (tested by `selftest.sh`, report-publish against a local listener).
 - `configs/`: the default tool configurations.
 - `tools/`: the tool version pins.
 - `testdata/`: fixtures CI runs the workflows against.

@@ -102,6 +102,13 @@ stay with Ansible.
   (`actions/attest-build-provenance`) on public repositories only: on
   private ones they need GitHub Enterprise Cloud, which isn't worth paying
   for here. Private images go without them; that is not a deviation.
+- **`:latest` never moves back.** The step before the one that moves
+  `:latest` is sadbox/ci's `newer-than-latest` action: when `:latest` was
+  built from a later commit than this run's (a re-run of an old publish,
+  after a newer one), the run tags `sha-<7>` alone and sends no report.
+  Otherwise the host's auto-update would install the older build, on
+  whatever state the newer one left. sprobot's own check (the commit is
+  still the tip of the default branch) does the same and more.
 - **Publish report.** The step after the one that moves `:latest` is
   sadbox/ci's `report-publish` action, once for the images the host runs
   (`names:` each container's name there). It records the build in Grafana
@@ -116,7 +123,9 @@ stay with Ansible.
   are in the repository's `publish` environment, limited to the default
   branch (homelab-configs `tofu/github`), and both jobs run in it: the
   token can write any series in the stack, so no other branch's workflow
-  may read it. A failed report fails the job (a re-run reports it).
+  may read it. A failed report fails the job; a re-run reports it (and
+  can't move `:latest` back, above), as does running `report-latest.yaml`
+  by hand, or its next daily run.
 - **Build cache:** the Actions cache (`type=gha`, one scope per runner
   architecture) is allowed, see [GitHub Actions](#github-actions).
 - **`.dockerignore`** in every repository with a Dockerfile (at least

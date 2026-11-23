@@ -195,4 +195,53 @@ for bad in 'REPORT_NAMES=Sprobot' 'REPORT_NAMES=a,b=c' 'REPORT_NAMES=' 'REPORT_V
 done
 kill "$listener"
 
+# newer-than-latest/newer.sh, with stand-ins for docker (what :latest was
+# built from) and gh (how that commit stands to this one): false only when
+# :latest is ahead; true when there is nothing to move back from; a
+# registry or an API that doesn't answer fails rather than guess.
+mkdir -p "$tmp/nl/bin"
+rev() { printf "$1%.0s" $(seq 40); }
+cat >"$tmp/nl/bin/docker" <<SH
+#!/usr/bin/env bash
+index() { printf '{"linux/amd64":{"config":{"Labels":{"org.opencontainers.image.revision":"%s"}}},"linux/arm64":{"config":{"Labels":{"org.opencontainers.image.revision":"%s"}}}}\n' "\$1" "\$1"; }
+case "\$4" in
+ghcr.io/x/older:latest) index $(rev a) ;;
+ghcr.io/x/later:latest) index $(rev b) ;;
+ghcr.io/x/same:latest) index $head ;;
+ghcr.io/x/elsewhere:latest) index $(rev c) ;;
+ghcr.io/x/apidown:latest) index $(rev d) ;;
+ghcr.io/x/branchy:latest) index $(rev e) ;;
+ghcr.io/x/nolabel:latest) echo '{"linux/amd64":{"config":{"Labels":{}}}}' ;;
+ghcr.io/x/missing:latest) echo "ERROR: ghcr.io/x/missing:latest: not found" >&2 && exit 1 ;;
+*) echo "ERROR: connection refused" >&2 && exit 1 ;;
+esac
+SH
+cat >"$tmp/nl/bin/gh" <<SH
+#!/usr/bin/env bash
+# gh api repos/<repo>/compare/<base>...<head> --jq .status
+case "\$2" in
+repos/sadbox/ci/compare/$(rev a)...$head) echo ahead ;;
+repos/sadbox/ci/compare/$(rev b)...$head) echo behind ;;
+repos/sadbox/ci/compare/$(rev e)...$head) echo diverged ;;
+repos/sadbox/ci/compare/$(rev c)...$head) echo "gh: Not Found (HTTP 404)" >&2 && exit 1 ;;
+*) echo "gh: Server Error (HTTP 500)" >&2 && exit 1 ;;
+esac
+SH
+chmod +x "$tmp/nl/bin/docker" "$tmp/nl/bin/gh"
+newer() { # newer <image>: prints what it wrote to GITHUB_OUTPUT
+  : >"$tmp/nl/out"
+  env -i PATH="$tmp/nl/bin:$PATH" GITHUB_SHA=$head GITHUB_REPOSITORY=sadbox/ci GH_TOKEN=x GITHUB_OUTPUT="$tmp/nl/out" \
+    IMAGE="$1" bash "$root/newer-than-latest/newer.sh" >"$tmp/nl/log" 2>&1 || return 1
+  cat "$tmp/nl/out"
+}
+for image in older same elsewhere branchy nolabel missing; do
+  [ "$(newer "ghcr.io/x/$image")" = newer=true ] || { cat "$tmp/nl/log"; fail "newer-than-latest: $image should be newer=true"; }
+done
+[ "$(newer ghcr.io/x/later)" = newer=false ] || { cat "$tmp/nl/log"; fail "newer-than-latest: a later :latest should be newer=false"; }
+grep -q 'not moving it back' "$tmp/nl/log" || fail "newer-than-latest: didn't say why: $(cat "$tmp/nl/log")"
+for image in ghcr.io/x/apidown ghcr.io/x/regdown 'ghcr.io/x/Bad:latest' older; do
+  if newer "$image" >/dev/null; then fail "newer-than-latest decided for $image"; fi
+  [ ! -s "$tmp/nl/out" ] || fail "newer-than-latest wrote an output for $image"
+done
+
 echo "selftest: ok"
