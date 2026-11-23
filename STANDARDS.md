@@ -240,8 +240,19 @@ stay with Ansible.
   every PR, never path-filtered ones: path-gated work is required through
   its aggregate job, see [GitHub Actions](#github-actions)), and **signed
   commits required**.
+- **Rulesets only, no classic branch protection.** The rulesets are in
+  homelab-configs `tofu/github`; classic rules there are invisible to it
+  and go stale (removed from seven repositories, 2026-11-23).
 - Dependabot alerts and security updates on; on public repositories also
-  secret scanning and push protection.
+  secret scanning, push protection, private vulnerability reporting, and
+  code scanning default setup (extended suite).
+- Settings through homelab-configs `tofu/github`. What the provider can't
+  set is listed there (`tofu/README.md`, "A new repository behind the
+  dep-review gate") and done by hand.
+- A secret that can write to a repository (an app's private key, a token)
+  is an environment's secret, the environment limited to the default
+  branch, never the repository's: a workflow on any branch can read a
+  repository secret.
 - No unused secrets.
 
 ## Deviations
