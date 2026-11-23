@@ -102,6 +102,17 @@ stay with Ansible.
   (`actions/attest-build-provenance`) on public repositories only: on
   private ones they need GitHub Enterprise Cloud, which isn't worth paying
   for here. Private images go without them; that is not a deviation.
+- **Publish report.** The step after the one that moves `:latest` is
+  sadbox/ci's `report-publish` action, once for the images the host runs
+  (`names:` each container's name there). It records the build in Grafana
+  Cloud (`sadbox_image_published_timestamp_seconds{name, version}`), which
+  an alert compares with what the host runs: a build published and not
+  running hours later is an update that didn't land. Its two secrets
+  (`GRAFANA_PUBLISH_URL`, `GRAFANA_PUBLISH_AUTH`) are in the repository's
+  `publish` environment, limited to the default branch (homelab-configs
+  `tofu/github`), and the job that moves `:latest` runs in it: the token
+  can write any series in the stack, so no other branch's workflow may
+  read it. A failed report fails the job (a re-run reports it).
 - **Build cache:** the Actions cache (`type=gha`, one scope per runner
   architecture) is allowed, see [GitHub Actions](#github-actions).
 - **`.dockerignore`** in every repository with a Dockerfile (at least

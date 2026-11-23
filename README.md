@@ -11,6 +11,9 @@ The standard base for sadbox projects:
   - [`lint.yml`](.github/workflows/lint.yml): the linters and
     vulnerability checks for everything else, each run only where the
     repository has files for it.
+- [`report-publish`](report-publish/action.yml): the action a publish
+  workflow runs after it moves `:latest`, so Grafana Cloud knows which
+  build the host should be running.
 
 ## Adopting it
 
@@ -118,6 +121,42 @@ Files are the repository's tracked files (`git ls-files`).
 
 Output: `linters`, the JSON list of the linters that ran.
 
+### report-publish
+
+A step, not a workflow, so it costs no extra job. Right after the step
+that moves `:latest`, in a job that runs in the repository's `publish`
+environment:
+
+```yaml
+  publish-merge:
+    environment: publish # holds the two secrets; the default branch only
+    steps:
+      # ... the step that moves :latest ...
+      - name: Tell Grafana what :latest now is
+        uses: sadbox/ci/report-publish@vX.Y.Z
+        with:
+          names: sprobot stickybot
+          url: ${{ secrets.GRAFANA_PUBLISH_URL }}
+          auth: ${{ secrets.GRAFANA_PUBLISH_AUTH }}
+```
+
+It sends one sample per name to Grafana Cloud's Influx line-protocol
+endpoint: `sadbox_image_published_timestamp_seconds{name, version}`, the
+time of the report. `names` are the containers that run the images on the
+host (what its `sadbox_container_info` calls them), so the two series
+join. A step-level action: the caller names the tag and `gh actions-lock`
+pins the commit (STANDARDS.md, GitHub Actions).
+
+| Input | Default | |
+|---|---|---|
+| `names` | | Space-separated; each `[a-z0-9][a-z0-9-]*`. |
+| `version` | the commit's first 7 characters | What the host reports as the build. |
+| `url`, `auth` | | The `publish` environment's secrets. `auth` is `<instance id>:<token>`, a `metrics:write` token. |
+
+It fails the job when the report isn't accepted or the secrets are
+missing (a job outside the environment, or not on the default branch),
+and never prints the endpoint or the credentials.
+
 ## Configuration
 
 Each tool takes, in order: the workflow's `*-config` input; the
@@ -159,6 +198,8 @@ change (an input renamed, a Dockerfile requirement) is a major version.
   `testdata/gosvc` on both architectures, and `scripts/selftest.sh`).
 - `scripts/`: what the workflows run; `selftest.sh` tests their failure
   paths.
+- `report-publish/`: the action and its script (tested by `selftest.sh`
+  against a local listener).
 - `configs/`: the default tool configurations.
 - `tools/`: the tool version pins.
 - `testdata/`: fixtures CI runs the workflows against.
