@@ -248,6 +248,18 @@ stay with Ansible.
   rest of `egress/go.mod` and its base images are Dependabot's as usual.
   The owner's choice (2026-11-22): v2 is where Smokescreen's development
   is; remove this entry once v2 is tagged.
+- **podman-proxy (homelab-configs, the door to Podman's API socket):** it
+  links Go's standard library only (`go.mod` has no requirements), so it
+  doesn't import `sadbox/svc`: its `-healthcheck` flag is the standard's,
+  written again in the service, and it has no `svc/telemetry`. Its counts
+  are a `/metrics` it writes itself, scraped by Alloy on a network of its
+  own, not pushed over OTLP. The owner's choice (2026-11-22): it is the one
+  container given that socket, so nothing else is linked into it.
+- **container-watch (homelab-configs, which build each container runs):**
+  one series, `sadbox_container_info`, is scraped from a `/metrics` of its
+  own rather than pushed over OTLP like the rest of its telemetry. A scrape
+  marks a stopped container's series gone at once; a pushed series lingers
+  five minutes, and after every deploy both builds would read as running.
 - Being brought in line (remove each entry when done):
   - amd64-only tests: linkclean.
   - govulncheck blind spot, rproxy (Caddy): Dependabot alerts on
