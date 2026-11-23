@@ -1,0 +1,31 @@
+name: newer-than-latest
+description: >-
+  Is this commit as new as the one an image's :latest was built from? So a
+  re-run of an old publish can't move :latest back.
+
+# The step before the one that moves :latest, after the registry login
+# (STANDARDS.md, Container images). `newer` is false only when :latest's
+# commit (its org.opencontainers.image.revision label) is ahead of this
+# one in git history: the caller then tags sha-<7> alone, and skips its
+# report. The job needs `contents: read` (GitHub's compare API, with the
+# job's token).
+inputs:
+  image:
+    description: The image repository (ghcr.io/owner/name).
+    required: true
+outputs:
+  newer:
+    description: "'false' when :latest is built from a later commit than this one, else 'true'."
+    value: ${{ steps.newer.outputs.newer }}
+
+runs:
+  using: composite
+  steps:
+    - name: Is this commit as new as :latest's?
+      id: newer
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        GH_TOKEN: ${{ github.token }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/newer.sh"
