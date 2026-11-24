@@ -50,7 +50,7 @@ in CI:
 | Python (uv) | ruff | `uv` + osv-scanner against `uv.lock` |
 | Shell | shellcheck | – |
 | GitHub Actions | actionlint, zizmor | zizmor (known-vulnerable actions) |
-| Dockerfiles | hadolint | the image's packages via the dep-review gate |
+| Dockerfiles | hadolint | – (the dep-review gate merges only listed official images, after its minimum age, and reads nothing of an image) |
 | Ansible | ansible-lint, `--syntax-check` | – |
 | OpenTofu | `tofu fmt -check`, `tofu validate`, tflint | – (providers pinned by version and lockfile hash; each bump reviewed by a human, see [OpenTofu](#opentofu)) |
 
