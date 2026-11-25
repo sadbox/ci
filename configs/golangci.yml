@@ -12,10 +12,15 @@ linters:
     - errorlint # errors compared or type-asserted without errors.Is/As
     - misspell
     - nolintlint # a //nolint must name the linter and still be needed
+    - sloglint # a log call with a context in scope passes it (trace_id on the line)
     - unconvert
   settings:
     nolintlint:
       require-specific: true
+    sloglint:
+      # Only this: svc/telemetry's log handler adds trace_id and span_id to
+      # records logged with a context, so a call that has one must pass it.
+      context: scope
   exclusions:
     # Generated files, and the usual false positives in tests.
     generated: lax
