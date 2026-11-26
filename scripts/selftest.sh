@@ -113,6 +113,15 @@ git init -q "$tmp/bin"
   bash "$root/scripts/binaries.sh" >/dev/null || fail "binaries.sh failed with every binary declared"
   if BINARY_MAX_BYTES=8 bash "$root/scripts/binaries.sh" >/dev/null; then fail "binaries.sh passed a declared file over the size allowed"; fi
   if BINARY_MAX_BYTES=5MB bash "$root/scripts/binaries.sh" >/dev/null 2>&1; then fail "binaries.sh took a size that isn't a number"; fi
+  # A path that reads as a revision (":0:small" is stage 0 of small): its
+  # own size counts, not small's.
+  printf 'x\n' >small
+  printf 'GIF89a\0\0\1 and more' >'0:small'
+  printf 'img/*.gif binary\n0:small binary\n' >.gitattributes
+  git add .
+  if got=$(BINARY_MAX_BYTES=10 bash "$root/scripts/binaries.sh"); then fail "binaries.sh sized 0:small as another file: $got"; fi
+  grep -q 'file=0:small::' <<<"$got" || fail "binaries.sh didn't name 0:small: $got"
+  git rm -q --cached small '0:small'
   # -text alone (no end-of-line conversion) is not a declaration.
   printf 'img/*.gif -text\n' >.gitattributes
   git add .

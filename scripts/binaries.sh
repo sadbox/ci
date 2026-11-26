@@ -2,7 +2,7 @@
 # binaries.sh: no binary file is tracked unless the repository says so
 # (STANDARDS.md, Binary files). Run from the root of the caller's checkout.
 # git decides both halves: a tracked file whose content it takes for binary
-# (git ls-files --eol: i/-text) must carry the `binary` attribute, from a
+# (git ls-files: eolinfo -text) must carry the `binary` attribute, from a
 # .gitattributes line such as
 #   cmd/app/photos/*.jpg binary
 # and a declared one must be no larger than $BINARY_MAX_BYTES (default
@@ -20,28 +20,33 @@ case $max in
 esac
 
 bad=0
+# One record per tracked file, NUL-terminated: what git makes of the index
+# content, the blob's size, the path. Sizes and attributes are asked for by
+# record, never by a revision built from the path (":<path>" reads a path
+# like "0:x" as stage 0 of x).
 while IFS= read -r -d '' rec; do
-  # "i/<index> w/<worktree> attr/<attrs> \t<path>"
-  path=${rec#*$'\t'}
-  case $rec in
-  i/-text*) ;;
-  *) continue ;;
-  esac
-  size=$(git cat-file -s ":$path")
-  declared=$(git check-attr binary -- "$path")
-  case $declared in
-  *": binary: set")
+  eol=${rec%%$'\t'*}
+  rest=${rec#*$'\t'}
+  size=${rest%%$'\t'*}
+  path=${rest#*$'\t'}
+  if [ "$eol" != -text ]; then continue; fi
+  # As the log shows it: a path's own line breaks can't start a line (and
+  # with it a workflow command) of their own.
+  shown=${path//%/%25}
+  shown=${shown//$'\n'/%0A}
+  shown=${shown//$'\r'/%0D}
+  # check-attr -z: <path> NUL <attribute> NUL <value> NUL
+  mapfile -d '' -t attr < <(printf '%s\0' "$path" | git check-attr -z --stdin binary)
+  if [ "${attr[2]:-}" = set ]; then
     if [ "$size" -gt "$max" ]; then
-      echo "::error file=$path::$path: a declared binary file of $size bytes, over the $max allowed (binary-max-bytes)"
+      echo "::error file=$shown::$shown: a declared binary file of $size bytes, over the $max allowed (binary-max-bytes)"
       bad=1
     else
-      echo "$path: declared binary, $size bytes"
+      echo "$shown: declared binary, $size bytes"
     fi
-    ;;
-  *)
-    echo "::error file=$path::$path: a binary file ($size bytes) that no .gitattributes line declares \`binary\`: remove it, or declare it if it belongs"
+  else
+    echo "::error file=$shown::$shown: a binary file ($size bytes) that no .gitattributes line declares \`binary\`: remove it, or declare it if it belongs"
     bad=1
-    ;;
-  esac
-done < <(git ls-files --eol -z)
+  fi
+done < <(git ls-files -z --format='%(eolinfo:index)%x09%(objectsize)%x09%(path)')
 exit "$bad"
