@@ -91,6 +91,13 @@ on:
         description: A tflint configuration, relative to the repository root.
         type: string
         default: ""
+      go-exempt:
+        description: >-
+          Go module directories not required to be checked by go.yml
+          (whitespace-separated), each a deviation recorded in sadbox/ci's
+          STANDARDS.md. Not affected by skip or exclude.
+        type: string
+        default: ""
     outputs:
       linters:
         description: The linters that ran, as a JSON list.
@@ -163,6 +170,14 @@ jobs:
         env:
           BINARY_MAX_BYTES: ${{ inputs.binary-max-bytes }}
         run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" binaries
+
+      # Not one of detect's linters, so skip can't turn it off: every Go
+      # module is checked by go.yml, or is a recorded deviation.
+      - name: go-workflow (every Go module checked by go.yml)
+        if: ${{ !cancelled() && steps.detect.outcome == 'success' }}
+        env:
+          GO_EXEMPT: ${{ inputs.go-exempt }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/go-workflow.sh"
 
       - name: shellcheck
         if: ${{ !cancelled() && steps.detect.outputs.shellcheck == 'true' }}

@@ -25,6 +25,8 @@ jobs:
       contents: read
     with:
       ansible-directory: testdata/ansible
+      # tools/go only pins the CI tools' versions (STANDARDS.md, Deviations).
+      go-exempt: tools/go
 
   # Docker mode: testdata/gosvc's Dockerfile `test` target.
   go-docker:

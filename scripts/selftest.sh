@@ -286,4 +286,33 @@ for image in ghcr.io/x/apidown ghcr.io/x/regdown 'ghcr.io/x/Bad:latest' older; d
   [ ! -s "$tmp/nl/out" ] || fail "newer-than-latest wrote an output for $image"
 done
 
+# go-workflow.sh: every Go module (outside testdata/, vendor/, dot dirs) is
+# in a go.yml call's context or modules, or exempt; a stale exemption fails.
+gw() { # gw DIR [GO_EXEMPT]: go-workflow.sh's exit status in DIR
+  (cd "$1" && GO_EXEMPT=${2:-} bash "$root/scripts/go-workflow.sh" >"$tmp/gw.log" 2>&1)
+}
+mkdir -p "$tmp/gw/.github/workflows" "$tmp/gw/svc" "$tmp/gw/lib" "$tmp/gw/testdata/x" "$tmp/gw/.hidden"
+for d in . svc lib testdata/x .hidden; do printf 'module m\n\ngo 1.26.0\n' >"$tmp/gw/$d/go.mod"; done
+git -C "$tmp/gw" init -q
+gwf() { printf '%s\n' "$@" >"$tmp/gw/.github/workflows/ci.yml"; git -C "$tmp/gw" add -A; }
+gwf 'jobs:' '  test:' '    runs-on: x' '    steps: [{run: go test ./...}]'
+if gw "$tmp/gw"; then fail "go-workflow passed modules no go.yml call checks"; fi
+grep -q 'module in svc' "$tmp/gw.log" || { cat "$tmp/gw.log"; fail "go-workflow didn't name svc"; }
+if grep -qE 'module in (testdata|\.hidden)' "$tmp/gw.log"; then fail "go-workflow counted a testdata/ or dot-directory module"; fi
+gwf 'jobs:' \
+  '  docker:' '    uses: sadbox/ci/.github/workflows/go.yml@0123 # v0' '    with:' '      context: ./svc/' \
+  '  # uses: sadbox/ci/.github/workflows/go.yml@0123' \
+  '  setup:' '    uses: "sadbox/ci/.github/workflows/go.yml@0123"' '    with:' "      go-versions: '[\"stable\"]'" '      modules: |' '        .' '        lib' \
+  '  other:' '    runs-on: x' '    steps: [{run: "echo context: nope"}]'
+gw "$tmp/gw" || { cat "$tmp/gw.log"; fail "go-workflow: context ./svc/ and block modules . lib should cover every module"; }
+gwf 'jobs:' '  docker:' '    uses: sadbox/ci/.github/workflows/go.yml@0123' '    with:' '      context: svc' '  lint:' '    uses: sadbox/ci/.github/workflows/lint.yml@0123'
+if gw "$tmp/gw"; then fail "go-workflow: a call with context svc covered the root module"; fi
+gw "$tmp/gw" ". lib" || { cat "$tmp/gw.log"; fail "go-workflow: exempt . and lib should pass"; }
+if gw "$tmp/gw" ". lib gone"; then fail "go-workflow passed a stale exemption"; fi
+grep -q 'go-exempt: gone has no go.mod' "$tmp/gw.log" || { cat "$tmp/gw.log"; fail "go-workflow didn't name the stale exemption"; }
+# shellcheck disable=SC2016 # a workflow expression, literally
+gwf 'jobs:' '  docker:' '    uses: ./.github/workflows/go.yml' '    with:' '      context: ${{ inputs.context }}'
+gw "$tmp/gw" || { cat "$tmp/gw.log"; fail "go-workflow: an expression should count as covering every module"; }
+grep -q 'notice' "$tmp/gw.log" || fail "go-workflow: no notice for an expression"
+
 echo "selftest: ok"
