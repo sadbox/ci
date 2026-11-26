@@ -21,6 +21,7 @@ linters:
       # Only this: svc/telemetry's log handler adds trace_id and span_id to
       # records logged with a context, so a call that has one must pass it.
       context: scope
+      no-mixed-args: false # sloglint's default; key-value pairs and attrs may mix
   exclusions:
     # Generated files, and the usual false positives in tests.
     generated: lax
