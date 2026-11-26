@@ -86,6 +86,39 @@ git init -q "$tmp/repo"
   [ "$(bash "$root/scripts/files.sh" tofuroot | tr "\0" " ")" = "infra/a " ] || fail "files.sh tofuroot: $(bash "$root/scripts/files.sh" tofuroot | tr "\0" " ")"
 )
 
+# binaries.sh: text passes; a binary file fails until .gitattributes
+# declares it, and then fails again over the size allowed; every offender
+# is named. detect.sh always runs it.
+grep -qx 'binaries=true' <<<"$out" || fail "detect.sh left the binaries check out"
+git init -q "$tmp/bin"
+(
+  cd "$tmp/bin"
+  mkdir -p img build
+  printf 'text\n' >notes.txt
+  : >empty
+  git add .
+  bash "$root/scripts/binaries.sh" >/dev/null || fail "binaries.sh failed a repository of text"
+  printf 'GIF89a\0\0\1' >img/a.gif
+  printf '\177ELF\0\0\0' >build/tool
+  git add .
+  if got=$(bash "$root/scripts/binaries.sh"); then fail "binaries.sh passed undeclared binary files"; fi
+  grep -q 'file=img/a.gif::' <<<"$got" || fail "binaries.sh didn't name img/a.gif: $got"
+  grep -q 'file=build/tool::' <<<"$got" || fail "binaries.sh didn't name build/tool: $got"
+  if grep -q 'notes.txt\|empty' <<<"$got"; then fail "binaries.sh named a text file: $got"; fi
+  printf 'img/*.gif binary\n' >.gitattributes
+  git add .
+  if got=$(bash "$root/scripts/binaries.sh"); then fail "binaries.sh passed build/tool, which nothing declares"; fi
+  if grep -q 'file=img/a.gif::' <<<"$got"; then fail "binaries.sh failed a declared file: $got"; fi
+  git rm -q --cached build/tool
+  bash "$root/scripts/binaries.sh" >/dev/null || fail "binaries.sh failed with every binary declared"
+  if BINARY_MAX_BYTES=8 bash "$root/scripts/binaries.sh" >/dev/null; then fail "binaries.sh passed a declared file over the size allowed"; fi
+  if BINARY_MAX_BYTES=5MB bash "$root/scripts/binaries.sh" >/dev/null 2>&1; then fail "binaries.sh took a size that isn't a number"; fi
+  # -text alone (no end-of-line conversion) is not a declaration.
+  printf 'img/*.gif -text\n' >.gitattributes
+  git add .
+  if bash "$root/scripts/binaries.sh" >/dev/null; then fail "binaries.sh took -text for a declaration"; fi
+)
+
 # dep-review-triggers.sh: the gate's caller may use workflow_run, never
 # pull_request_target (zizmor's exemption for the file would hide it).
 mkdir -p "$tmp/dr/.github/workflows"

@@ -103,6 +103,7 @@ Dockerfile (Docker mode) or lists the modules (setup-go mode).
 |---|---|---|
 | actionlint | always | `.github/actionlint.yaml` |
 | zizmor | always | `zizmor.yml`, `.github/zizmor.yml` |
+| binaries | always: a tracked file git takes for binary fails unless a `.gitattributes` line declares it `binary`, or if it is larger than `binary-max-bytes` | `.gitattributes` |
 | shellcheck | `*.sh`, `*.bash`, `*.ksh`, `*.dash`, or a sh/bash/dash/ksh shebang | `.shellcheckrc` |
 | hadolint | `Dockerfile*`, `Containerfile*`, `*.Dockerfile` | `.hadolint.yaml` |
 | ruff check | `*.py` | `ruff.toml`, `pyproject.toml` `[tool.ruff]` |
@@ -115,8 +116,9 @@ Files are the repository's tracked files (`git ls-files`).
 
 | Input | Default | |
 |---|---|---|
-| `skip` | | Linters not to run: `actionlint zizmor shellcheck hadolint ruff osv-scanner npm eslint ansible tofu actions-lock`. |
-| `exclude` | | An extended regex; matching paths are not linted. |
+| `skip` | | Linters not to run: `actionlint zizmor binaries shellcheck hadolint ruff osv-scanner npm eslint ansible tofu actions-lock`. |
+| `exclude` | | An extended regex; matching paths are not linted (the binaries check ignores it). |
+| `binary-max-bytes` | `5242880` | The largest a declared binary file may be. |
 | `ansible-directory` | `ansible` | |
 | `ansible-playbooks` | top-level `*.yml` naming `hosts:` or `import_playbook:` | Relative to `ansible-directory`. |
 | `actionlint-config`, `zizmor-config`, `hadolint-config`, `ansible-lint-config`, `tflint-config` | | A configuration file. |

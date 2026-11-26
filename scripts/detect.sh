@@ -5,6 +5,7 @@
 # $SKIP lists linters not to run (whitespace- or comma-separated); the
 # rest run when the repository has files for them:
 #   - actionlint, zizmor: always (every repository has workflows)
+#   - binaries: always (binaries.sh: no undeclared binary file)
 #   - shellcheck: shell scripts (files.sh's "shell" kind)
 #   - hadolint: Dockerfiles
 #   - ruff: *.py
@@ -20,7 +21,7 @@ set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 skip=" $(echo "${SKIP:-}" | tr ',' ' ' | xargs) "
-known=" actionlint zizmor shellcheck hadolint ruff osv-scanner npm eslint ansible tofu actions-lock "
+known=" actionlint zizmor binaries shellcheck hadolint ruff osv-scanner npm eslint ansible tofu actions-lock "
 for s in $skip; do
   case $known in
   *" $s "*) ;;
@@ -37,7 +38,7 @@ has() { [ "$(bash "$here/files.sh" "$1" | wc -c)" -gt 0 ]; }
 # applies TOOL: whether the repository has files for TOOL.
 applies() {
   case $1 in
-  actionlint | zizmor) return 0 ;;
+  actionlint | zizmor | binaries) return 0 ;;
   shellcheck) has shell ;;
   hadolint) has dockerfile ;;
   ruff) has python ;;
@@ -51,7 +52,7 @@ applies() {
 
 list=()
 out=${GITHUB_OUTPUT:-/dev/null}
-for k in actionlint zizmor shellcheck hadolint ruff osv-scanner npm ansible tofu actions-lock; do
+for k in actionlint zizmor binaries shellcheck hadolint ruff osv-scanner npm ansible tofu actions-lock; do
   v=false
   case $skip in
   *" $k "*) ;;

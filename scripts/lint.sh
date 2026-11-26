@@ -81,6 +81,11 @@ actions-lock)
   "$bin" --verify --no-interactive
   ;;
 
+binaries)
+  # git alone (no tool image): detection and declarations are both its own.
+  bash "$ci/scripts/binaries.sh"
+  ;;
+
 shellcheck)
   mapfile -d '' list < <(files shell)
   printf '%s\n' "${list[@]}"

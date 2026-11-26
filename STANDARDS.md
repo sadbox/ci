@@ -54,6 +54,17 @@ in CI:
 | Ansible | ansible-lint, `--syntax-check` | – |
 | OpenTofu | `tofu fmt -check`, `tofu validate`, tflint | – (providers pinned by version and lockfile hash; each bump reviewed by a human, see [OpenTofu](#opentofu)) |
 
+## Binary files
+
+No binary file is tracked unless the repository declares it: a build's
+output, an archive or a database committed by accident is megabytes of
+history for good, and content no reviewer can read. lint.yml's `binaries`
+step fails on any tracked file git takes for binary that no
+`.gitattributes` line marks `binary`, and on a declared one over 5 MiB
+(`binary-max-bytes`). Declare by the narrowest pattern that fits
+(`docs/screenshots/*.png binary`, never `* binary`), in the PR that adds
+the file.
+
 ## OpenTofu
 
 For hosted services (DNS, monitoring, GitHub settings), not hosts: hosts
