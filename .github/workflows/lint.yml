@@ -15,6 +15,9 @@
 # it could forge only its own result.
 #
 #   actionlint, zizmor    always (every repository has workflows)
+#   binaries              always: a tracked file git takes for binary must be
+#                         declared `binary` in .gitattributes, and be no
+#                         larger than binary-max-bytes
 #   shellcheck            *.sh/*.bash/*.ksh/*.dash and sh/bash shebangs
 #   hadolint              Dockerfiles
 #   ruff                  *.py
@@ -41,14 +44,18 @@ on:
       skip:
         description: >-
           Linters not to run, whitespace- or comma-separated: actionlint,
-          zizmor, shellcheck, hadolint, ruff, osv-scanner, npm, eslint,
-          ansible, tofu, actions-lock.
+          zizmor, binaries, shellcheck, hadolint, ruff, osv-scanner, npm,
+          eslint, ansible, tofu, actions-lock.
         type: string
         default: ""
       exclude:
         description: An extended regular expression; tracked paths matching it are not linted.
         type: string
         default: ""
+      binary-max-bytes:
+        description: The largest a binary file declared in .gitattributes may be, in bytes.
+        type: number
+        default: 5242880
       ansible-directory:
         description: The ansible directory (its ansible.cfg, playbooks, and pyproject.toml/uv.lock if it has them).
         type: string
@@ -150,6 +157,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" actions-lock
+
+      - name: binaries (declared in .gitattributes)
+        if: ${{ !cancelled() && steps.detect.outputs.binaries == 'true' }}
+        env:
+          BINARY_MAX_BYTES: ${{ inputs.binary-max-bytes }}
+        run: bash "$RUNNER_TEMP/sadbox-ci/scripts/lint.sh" binaries
 
       - name: shellcheck
         if: ${{ !cancelled() && steps.detect.outputs.shellcheck == 'true' }}
