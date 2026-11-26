@@ -300,6 +300,12 @@ stay with Ansible.
   own rather than pushed over OTLP like the rest of its telemetry. A scrape
   marks a stopped container's series gone at once; a pushed series lingers
   five minutes, and after every deploy both builds would read as running.
+- **Espresso-Aficionados/sprobot:** `github.com/gorilla/websocket`
+  (disgo's gateway) is pinned to an untagged commit for GO-2026-6278 (v1.5.3,
+  the latest tag, takes its websocket mask key from `math/rand`, which
+  govulncheck finds reachable), and Dependabot never moves a pseudo-version.
+  Move to a tag by hand once gorilla tags one past it or disgo requires one,
+  and remove this entry (2026-11-26).
 - **sadbox/ci `tools/go`:** the module that pins the CI tools' versions
   (golangci-lint, govulncheck) has no code of its own, so `go.yml` doesn't
   check it; it is in `ci.yml`'s `go-exempt`. Dependabot bumps it; the
