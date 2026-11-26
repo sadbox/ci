@@ -36,7 +36,11 @@ Every long-running service:
 - **Static builds:** `CGO_ENABLED=0`, `-trimpath`. Prefer pure-Go libraries
   over cgo (e.g. `modernc.org/sqlite`, not `mattn/go-sqlite3`).
 - **Checks in CI, on linux/amd64 and linux/arm64 natively:** `gofmt`,
-  `go vet`, `go test -race`, `golangci-lint`, `govulncheck`.
+  `go vet`, `go test -race`, `golangci-lint`, `govulncheck`, by sadbox/ci's
+  `go.yml`, never a hand-rolled job (which keeps whatever it checked when it
+  was written). lint.yml fails a repository with a Go module no `go.yml`
+  call covers (`scripts/go-workflow.sh`); a module that can't use it is a
+  deviation recorded below and listed in lint.yml's `go-exempt`.
 
 ## Other languages
 
@@ -296,6 +300,10 @@ stay with Ansible.
   own rather than pushed over OTLP like the rest of its telemetry. A scrape
   marks a stopped container's series gone at once; a pushed series lingers
   five minutes, and after every deploy both builds would read as running.
+- **sadbox/ci `tools/go`:** the module that pins the CI tools' versions
+  (golangci-lint, govulncheck) has no code of its own, so `go.yml` doesn't
+  check it; it is in `ci.yml`'s `go-exempt`. Dependabot bumps it; the
+  fixtures' runs are its test.
 - Being brought in line (remove each entry when done):
   - amd64-only tests: linkclean.
   - govulncheck blind spot, rproxy (Caddy): Dependabot alerts on
